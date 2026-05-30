@@ -25,7 +25,7 @@ spec:
       containers:
       - name: fluentd
         imagePullPolicy: "Always"
-        image: prakrit55/fluentd-demo
+        image: prakrit55/fluentd-monitoring-ops
         env:
           - name:  FLUENT_ELASTICSEARCH_HOST
             value: "elasticsearch.elastic-kibana"
