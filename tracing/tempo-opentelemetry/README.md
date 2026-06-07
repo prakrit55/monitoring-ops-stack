@@ -29,21 +29,51 @@ graph TD
 
 ## Prerequisites & IAM Setup
 
-### GCS Bucket
-A GCS bucket named `oteltempo-traces` must exist in your GCP project.
+To configure Google Cloud Storage and GKE Workload Identity for Tempo, run the following setup commands. Replace `<project-id>` and `<bucket-name>` (e.g. `oteltempo-traces`) with your actual values.
 
-### Workload Identity
-Tempo uses GKE Workload Identity to authenticate with Google Cloud Storage without static credentials.
-1. The Google Service Account (GSA) `tempo-gcs-sa@<project-id>.iam.gserviceaccount.com` must be bound to the Kubernetes Service Account (KSA) `tempo` in the `monitoring` namespace.
-2. The GSA must have the following IAM roles on the bucket:
-   * **Storage Object Admin** (`roles/storage.objectAdmin`): To read and write span blocks.
-   * **Storage Legacy Bucket Reader** (`roles/storage.legacyBucketReader`): Required for bucket metadata access (i.e. `storage.buckets.get` permission).
-
-Example command to add the legacy bucket reader role:
+### 1. Create the GCS Bucket
+Create the GCS bucket with uniform bucket-level access enabled:
 ```bash
-gcloud storage buckets add-iam-policy-binding gs://oteltempo-traces \
+gcloud storage buckets create gs://<bucket-name> \
+  --project=<project-id> \
+  --location=us-central1 \
+  --uniform-bucket-level-access
+```
+
+### 2. Create the Google Service Account (GSA)
+Create the dedicated GSA that Tempo will assume:
+```bash
+gcloud iam service-accounts create tempo-gcs-sa \
+  --description="Service account for Grafana Tempo to access GCS" \
+  --display-name="tempo-gcs-sa" \
+  --project=<project-id>
+```
+
+### 3. Grant GCS Permissions to the GSA
+Tempo requires two roles bound at the bucket level:
+* **Storage Object Admin** (`roles/storage.objectAdmin`): To read and write span blocks.
+* **Storage Legacy Bucket Reader** (`roles/storage.legacyBucketReader`): Required for bucket metadata access (`storage.buckets.get` permission).
+
+Run the following commands to bind the roles to the bucket:
+```bash
+# Grant object-level read/write permissions
+gcloud storage buckets add-iam-policy-binding gs://<bucket-name> \
+  --member="serviceAccount:tempo-gcs-sa@<project-id>.iam.gserviceaccount.com" \
+  --role="roles/storage.objectAdmin"
+
+# Grant bucket-level metadata read permissions
+gcloud storage buckets add-iam-policy-binding gs://<bucket-name> \
   --member="serviceAccount:tempo-gcs-sa@<project-id>.iam.gserviceaccount.com" \
   --role="roles/storage.legacyBucketReader"
+```
+
+### 4. Bind GSA to GKE Service Account (Workload Identity)
+Allow the Kubernetes Service Account `tempo` in namespace `monitoring` to impersonate the Google Service Account using Workload Identity:
+```bash
+gcloud iam service-accounts add-iam-policy-binding tempo-gcs-sa@<project-id>.iam.gserviceaccount.com \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="serviceAccount:<project-id>.svc.id.goog[monitoring/tempo]" \
+  --project=<project-id>
 ```
 
 ---
