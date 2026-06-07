@@ -1,0 +1,31 @@
+replicas: 1
+
+tempo:
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 300m
+      memory: 200Mi
+
+  storage:
+    trace:
+      backend: gcs
+      gcs:
+        bucket_name: "oteltempo-traces"
+
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: "http://monitoring-kube-prometheus-prometheus:9090/api/v1/write"
+
+  overrides:
+    defaults:
+      metrics_generator:
+        processors: [service-graphs, span-metrics, local-blocks]
+
+serviceAccount:
+  create: true
+  name: "tempo"
+  annotations:
+    iam.gke.io/gcp-service-account: "tempo-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com"
