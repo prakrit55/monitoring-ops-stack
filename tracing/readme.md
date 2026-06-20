@@ -23,13 +23,13 @@ flowchart LR
     classDef fail fill:#FFEBEE,stroke:#F44336,stroke-width:2px,color:#B71C1C;
 
     subgraph Phase1 ["🐙 Trigger & Setup"]
-        T1([💻 Push/PR]) ==> S1["📥 Checkout"] ==> S2["🐍 Python 3.14"] ==> S3["📦 Install & Cache"]
+        T1(["💻 Push/PR"]) ==> S1["📥 Checkout"] ==> S2["🐍 Python 3.14"] ==> S3["📦 Install & Cache"]
     end
 
     subgraph Phase2 ["🧪 Code Quality"]
         Q1["🧪 Run pytest"] ==> Q2{"📈 Pass Rate >= 85%?"}
-        Q2 -- No ==> Q_FAIL[❌ Fail Build]
-        Q2 -- Yes ==> Q3["🛡️ Bandit SAST"] ==> Q4["🔍 pip-audit SCA"]
+        Q2 ==>|No| Q_FAIL["❌ Fail Build"]
+        Q2 ==>|Yes| Q3["🛡️ Bandit SAST"] ==> Q4["🔍 pip-audit SCA"]
     end
 
     subgraph Phase3 ["🐳 Container Security"]
@@ -37,7 +37,7 @@ flowchart LR
     end
 
     subgraph Phase4 ["🚀 Deploy"]
-        D1["📤 Push Image"] ==> D2["🚀 Deploy Cloud Run"] ==> D3([🌐 Service Live])
+        D1["📤 Push Image"] ==> D2["🚀 Deploy Cloud Run"] ==> D3(["🌐 Service Live"])
     end
 
     %% Connections between phases
