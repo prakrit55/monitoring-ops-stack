@@ -1,0 +1,41 @@
+# Disable Prometheus since we only need Grafana for Loki experimentation
+prometheus:
+  enabled: false
+
+grafana:
+  service:
+    type: ClusterIP
+
+  # Enable anonymous access for demo (default: requires login)
+  grafana.ini:
+    auth.anonymous:
+      enabled: true
+      org_role: Admin
+    auth:
+      disable_login_form: true
+  
+  # Connect Grafana to Loki only
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Loki
+          type: loki
+          access: proxy
+          url: http://loki-gateway
+          uid: loki
+          jsonData:
+            maxLines: 1000
+
+# Disable other components to keep the footprint as light as possible
+alertmanager:
+  enabled: false
+
+nodeExporter:
+  enabled: false
+
+prometheus-node-exporter:
+  enabled: false
+
+kubeStateMetrics:
+  enabled: false

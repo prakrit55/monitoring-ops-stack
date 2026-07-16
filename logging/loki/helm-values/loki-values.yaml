@@ -1,0 +1,45 @@
+# Run Loki in single-binary mode for simplicity.
+# For high-volume production logs, you can switch this to SimpleScalable.
+deploymentMode: SingleBinary
+
+loki:
+  # Disable authentication (multi-tenancy) for single-tenant experimentation
+  auth_enabled: false
+
+  # Set replication factor to 1 since we are running a single replica (SingleBinary mode)
+  commonConfig:
+    replication_factor: 1
+
+  # Storage configuration mapping to Google Cloud Storage (GCS)
+  storage:
+    type: gcs
+    gcs:
+      bucket_name: "loki-logs-k8s-staging-252732"
+    bucketNames:
+      chunks: "loki-logs-k8s-staging-252732"
+      ruler: "loki-logs-k8s-staging-252732"
+
+  # Schema configuration
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: gcs
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+# Define the service account and GKE Workload Identity annotation
+serviceAccount:
+  create: true
+  name: loki-sa
+  annotations:
+    # Google Cloud Service Account (GSA) email allowed to read/write to the GCS bucket
+    iam.gke.io/gcp-service-account: "loki-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com"
+
+# Disable memcached results and chunk caching to fit in resource-constrained clusters
+resultsCache:
+  enabled: false
+chunksCache:
+  enabled: false

@@ -1,0 +1,88 @@
+alloy:
+  configMap:
+    content: |
+      // Discover Kubernetes Pods
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      // Relabel discovered pods to construct __path__ for tailing container logs,
+      // and attach useful labels (namespace, pod name, container name, labels)
+      discovery.relabel "pod_logs" {
+        targets = discovery.kubernetes.pods.targets
+
+        // Extract container log path on the node
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+          action        = "replace"
+          target_label  = "__path__"
+          separator     = "/"
+          replacement   = "/var/log/pods/*$1/*.log"
+        }
+
+        // Expose container name as "container"
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          action        = "replace"
+          target_label  = "container"
+        }
+
+        // Expose pod name as "pod"
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          action        = "replace"
+          target_label  = "pod"
+        }
+
+        // Expose namespace as "namespace"
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          action        = "replace"
+          target_label  = "namespace"
+        }
+
+        // Expose node name as "node"
+        rule {
+          source_labels = ["__meta_kubernetes_pod_node_name"]
+          action        = "replace"
+          target_label  = "node"
+        }
+
+        // Map pod labels (e.g. app, version, release) to log labels
+        rule {
+          action = "labelmap"
+          regex  = "__meta_kubernetes_pod_label_(.+)"
+        }
+      }
+
+      // Match the files based on the paths constructed by discovery.relabel
+      local.file_match "pod_logs" {
+        path_targets = discovery.relabel.pod_logs.output
+      }
+
+      // Tail the logs from the matched file paths
+      loki.source.file "pods" {
+        targets    = local.file_match.pod_logs.targets
+        forward_to = [loki.write.loki_endpoint.receiver]
+      }
+
+      // Write logs to Grafana Loki
+      loki.write "loki_endpoint" {
+        endpoint {
+          // Point to Loki gateway service in the monitoring namespace
+          url = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+        }
+      }
+
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+
+  # Enable host path mounts for container logs
+  mounts:
+    varlog: true
+    dockercontainers: true
+
+# Ensure Alloy runs as a DaemonSet to scrape logs from all nodes
+controller:
+  type: "daemonset"

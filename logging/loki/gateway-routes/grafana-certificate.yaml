@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grafana-gateway-tls
+  namespace: monitoring
+spec:
+  commonName: grafana.prakriti.website
+  dnsNames:
+  - grafana.prakriti.website
+  secretName: grafana-tls-secret
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
