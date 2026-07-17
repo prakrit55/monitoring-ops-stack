@@ -1,0 +1,61 @@
+name: Build and Push Loki Test Apps
+
+on:
+  push:
+    paths:
+      - 'logging/loki/test/**'
+      - '.github/workflows/loki-test-apps.yaml'
+  workflow_dispatch:
+
+env:
+  GAR_LOCATION: us-central1
+  PROJECT_ID: k8s-staging-252732
+
+jobs:
+  build-and-push:
+    name: Build & Push Images to GAR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Required for requesting the OIDC JWT token
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
+          workload_identity_provider: 'projects/898698082979/locations/global/workloadIdentityPools/loki-test-pool/providers/github-provider'
+          service_account: 'loki-test-pusher@k8s-staging-252732.iam.gserviceaccount.com'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Google Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GAR_LOCATION }}-docker.pkg.dev
+          username: oauth2access
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Build and Push Service A
+        uses: docker/build-push-action@v5
+        with:
+          context: ./logging/loki/test/service-a
+          file: ./logging/loki/test/service-a/Dockerfile
+          push: true
+          tags: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/service-a/service-a:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and Push Service B
+        uses: docker/build-push-action@v5
+        with:
+          context: ./logging/loki/test/service-b
+          file: ./logging/loki/test/service-b/Dockerfile
+          push: true
+          tags: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/service-b/service-b:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,55 @@
+# otel-loki-values.yaml
+# Helm values for OpenTelemetry Collector to ingest logs and export them to Grafana Loki.
+# This assumes deployment in the same cluster, forwarding logs to the loki-gateway in the monitoring namespace.
+
+mode: deployment
+
+image:
+  # Using the k8s/contrib distribution image which includes the loki exporter
+  repository: "ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s"
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+  processors:
+    # The batch processor is recommended to optimize ingestion and request payloads
+    batch:
+      send_batch_size: 1000
+      timeout: 1s
+      send_batch_max_size: 1024
+
+    # Optional: memory limiter to safeguard the collector from out-of-memory errors
+    memory_limiter:
+      check_interval: 1s
+      limit_percentage: 75
+      spike_limit_percentage: 15
+
+  exporters:
+    # Method 1: Using the dedicated loki exporter (recommended for standard Loki setups)
+    loki:
+      endpoint: "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+      
+      # Optional metadata/tenant configurations
+      # headers:
+      #   "X-Scope-OrgID": "tenant-1"
+
+    # Method 2: Native OTLP over HTTP (supported in Loki 3.0+)
+    # To use this, uncomment this exporter and update the pipeline below.
+    # Note: Loki must have `allow_structured_metadata: true` configured.
+    # otlphttp/loki:
+    #   endpoint: "http://loki-gateway.monitoring.svc.cluster.local/otlp"
+    #   tls:
+    #     insecure: true
+
+  service:
+    pipelines:
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [loki]
