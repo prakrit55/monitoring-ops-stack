@@ -6,17 +6,29 @@ This directory contains the Helm values, configurations, and step-by-step instru
 
 ## 📊 Architecture Flow
 
-The logging pipeline flows through the components as follows:
+![GKE Loki Architecture Diagram](loki-architecture.png)
 
-![GKE Loki Alloy Architecture Diagram](architecture-diagram.jpg)
+### 🔁 Dual-Path Ingestion Flow
 
-1. **Stdout/Stderr Redirection**: GKE container engines stream stdout and stderr outputs of all running pods to files inside the host node directory `/var/log/pods`.
-2. **Kubernetes Discovery (`discovery.kubernetes`)**: Grafana Alloy runs as a `DaemonSet` on every GKE node, using the Kubernetes API to discover all running pods on the same host.
-3. **Target Relabeling (`discovery.relabel`)**: Converts pod metadata (namespace, name, labels) to log labels and constructs GKE-compatible file path wildcards (e.g. `/var/log/pods/*<pod_uid>/<container_name>/*.log`).
-4. **File Match (`local.file_match`)**: Scans the node filesystem to expand wildcards to concrete log file paths (resolving GKE directory-level structure on disk).
-5. **Log Tailing & Forwarding (`loki.source.file` & `loki.write`)**: Tails the resolved `.log` files and sends the entries over HTTP to the `loki-gateway` NGINX service on port 80.
-6. **Loki Storage**: Grafana Loki stores the indexes and log chunks in your GCP **Google Cloud Storage (GCS)** bucket, authenticating securely via **GKE Workload Identity**.
-7. **Visualization**: Grafana queries logs from Loki and exposes them via the **Explore** interface at `https://grafana.prakriti.website`.
+The logging pipeline leverages two parallel, modern ingestion paths:
+
+1. **Host-Level Log Scraping (Grafana Alloy)**:
+   - **Log Redirection**: Applications dump stdout/stderr logs, which GKE automatically captures and writes to `/var/log/pods/*.log` on the host node filesystem.
+   - **DaemonSet Scraper**: Grafana Alloy runs as a DaemonSet on each node, dynamically tailing all log files and enriching them with Kubernetes metadata labels (pod name, namespace, host).
+   - **Gateway Delivery**: Alloy streams the aggregated log blocks directly to the `loki-gateway` service.
+
+2. **Direct Push Logs (OpenTelemetry Collector)**:
+   - **OTel Logger Bridge**: Applications send structured, contextual log records directly from memory using the OTel Go Logger SDK.
+   - **OTel Collector**: The `opentelemetry-collector` deployment processes the log streams (applying batching, resource detection, and memory limits) and forwards them to the gateway using the native `otlphttp` exporter.
+
+3. **Loki Storage & Authentication**:
+   - The **Loki Gateway** acts as the Nginx reverse proxy routing ingest streams.
+   - **Grafana Loki** packages chunks and writes them directly to the GCP Cloud Storage bucket (`gs://loki-logs-k8s-staging-252732`).
+   - Secure bucket authentication is handled keylessly via **GKE Workload Identity** by binding the Kubernetes service account `loki-sa` to the GCP service account `loki-gcs-sa`.
+
+4. **Visualization**:
+   - Grafana pulls queried logs from Loki Gateway.
+   - External clients access the dashboards securely at `https://grafana.prakriti.website` routed via SNI on the shared GKE `rancher-gateway` load balancer.
 
 ---
 

@@ -1,13 +1,13 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: grafana-gateway-tls
+  name: loki-test-tls
   namespace: cattle-system
 spec:
-  commonName: grafana.prakriti.website
+  commonName: loki-test.prakriti.website
   dnsNames:
-  - grafana.prakriti.website
-  secretName: grafana-tls-secret
+  - loki-test.prakriti.website
+  secretName: loki-test-tls-secret
   issuerRef:
     name: selfsigned-issuer
     kind: ClusterIssuer
