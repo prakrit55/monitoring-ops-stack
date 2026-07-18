@@ -2,7 +2,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: grafana-gateway-tls
-  namespace: cattle-system
+  namespace: gateway-system
 spec:
   commonName: grafana.prakriti.website
   dnsNames:

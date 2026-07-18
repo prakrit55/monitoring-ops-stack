@@ -39,19 +39,13 @@ To store logs reliably, Loki requires a GCS bucket. We authenticate the Loki pod
 ### 1. Create the GCS Bucket
 Create the GCS bucket with uniform bucket-level access enabled:
 ```bash
-gcloud storage buckets create gs://loki-logs-k8s-staging-252732 \
-  --project=k8s-staging-252732 \
-  --location=us-central1 \
-  --uniform-bucket-level-access
+gcloud storage buckets create gs://loki-logs-k8s-staging-252732 --project=k8s-staging-252732 --location=us-central1 --uniform-bucket-level-access
 ```
 
 ### 2. Create the Google Service Account (GSA)
 Create the dedicated GSA that Loki will assume to interact with GCS:
 ```bash
-gcloud iam service-accounts create loki-gcs-sa \
-  --description="Service account for Grafana Loki to write and read logs from GCS" \
-  --display-name="loki-gcs-sa" \
-  --project=k8s-staging-252732
+gcloud iam service-accounts create loki-gcs-sa --description="Service account for Grafana Loki to write and read logs from GCS" --display-name="loki-gcs-sa" --project=k8s-staging-252732
 ```
 
 ### 3. Grant GCS Permissions to the GSA
@@ -62,23 +56,16 @@ Loki requires two roles bound at the bucket level:
 Run the following commands to bind the roles to the bucket:
 ```bash
 # Grant object-level read/write permissions
-gcloud storage buckets add-iam-policy-binding gs://loki-logs-k8s-staging-252732 \
-  --member="serviceAccount:loki-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com" \
-  --role="roles/storage.objectAdmin"
+gcloud storage buckets add-iam-policy-binding gs://loki-logs-k8s-staging-252732 --member="serviceAccount:loki-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com" --role="roles/storage.objectAdmin"
 
 # Grant bucket-level metadata read permissions
-gcloud storage buckets add-iam-policy-binding gs://loki-logs-k8s-staging-252732 \
-  --member="serviceAccount:loki-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com" \
-  --role="roles/storage.legacyBucketReader"
+gcloud storage buckets add-iam-policy-binding gs://loki-logs-k8s-staging-252732 --member="serviceAccount:loki-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com" --role="roles/storage.legacyBucketReader"
 ```
 
 ### 4. Bind GSA to GKE Service Account (Workload Identity)
 Allow the Kubernetes Service Account `loki-sa` in the `monitoring` namespace to impersonate the Google Service Account using Workload Identity:
 ```bash
-gcloud iam service-accounts add-iam-policy-binding loki-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com \
-  --role="roles/iam.workloadIdentityUser" \
-  --member="serviceAccount:k8s-staging-252732.svc.id.goog[monitoring/loki-sa]" \
-  --project=k8s-staging-252732
+gcloud iam service-accounts add-iam-policy-binding loki-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com --role="roles/iam.workloadIdentityUser" --member="serviceAccount:k8s-staging-252732.svc.id.goog[monitoring/loki-sa]" --project=k8s-staging-252732
 ```
 
 ---
@@ -100,38 +87,43 @@ helm repo update
 ### 2. Deploy Grafana Loki
 Apply the config and install Loki (note: `resultsCache` and `chunksCache` are disabled in [loki-values.yaml](file:///r:/Devops%20territory/monitoring-ops-stack/logging/loki/helm-values/loki-values.yaml) to run on resource-constrained clusters):
 ```bash
-helm upgrade --install loki grafana/loki \
-  --namespace monitoring \
-  --values helm-values/loki-values.yaml \
-  --wait
+helm upgrade --install loki grafana/loki --namespace monitoring --values helm-values/loki-values.yaml --wait
 ```
 
 ### 3. Deploy Grafana Alloy
 Deploy Grafana Alloy as a DaemonSet to start tailing node log paths:
 ```bash
-helm upgrade --install alloy grafana/alloy \
-  --namespace monitoring \
-  --values helm-values/alloy-values.yaml \
-  --wait
+helm upgrade --install alloy grafana/alloy --namespace monitoring --values helm-values/alloy-values.yaml --wait
 ```
 
 ### 4. Deploy the Grafana Stack
 Deploy Grafana with only the Loki datasource pre-configured, and exposed via ClusterIP for your GKE Gateway:
 ```bash
-helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
-  --version 72.6.2 \
-  --namespace monitoring \
-  --values helm-values/prometheus-grafana-stack.yaml \
-  --wait
+helm upgrade --install monitoring prometheus-community/kube-prometheus-stack --version 72.6.2 --namespace monitoring --values helm-values/prometheus-grafana-stack.yaml --wait
 ```
 
 ### 5. Apply GKE Gateway Manifests
-Expose Grafana externally at `grafana.prakriti.website` using the GKE Gateway API:
+
+#### 🌐 Shared Gateway Routing Architecture
+To implement separation of concerns and reduce ingress resource costs, we deploy a single shared gateway (`default-gateway`) inside a central, platform-admin namespace (`gateway-system`). Application-native HTTPRoutes then reside locally inside their respective workspaces (`monitoring`, `cattle-system`):
+
+
+![Shared Gateway Routing Architecture](gateway-architecture.png)
+
+
+Expose Grafana and the Loki Test App externally using the GKE Gateway API:
 ```bash
-kubectl apply -f gateway-routes/grafana-gateway.yaml
-kubectl apply -f gateway-routes/grafana-certificate.yaml
-kubectl apply -f gateway-routes/grafana-httproute.yaml
-kubectl apply -f gateway-routes/grafana-healthcheck.yaml
+# 1. Apply the shared Gateway
+kubectl apply -f logging/loki/gateway-routes/gateway.yaml
+
+# 2. Expose Grafana
+kubectl apply -f logging/loki/gateway-routes/grafana-certificate.yaml
+kubectl apply -f logging/loki/gateway-routes/grafana-httproute.yaml
+kubectl apply -f logging/loki/gateway-routes/grafana-healthcheck.yaml
+
+# 3. Expose Loki Test App (Service A)
+kubectl apply -f logging/loki/gateway-routes/loki-test-certificate.yaml
+kubectl apply -f logging/loki/gateway-routes/loki-test-httproute.yaml
 ```
 
 ---

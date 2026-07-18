@@ -5,8 +5,8 @@ metadata:
   namespace: monitoring
 spec:
   parentRefs:
-  - name: rancher-gateway
-    namespace: cattle-system
+  - name: default-gateway
+    namespace: gateway-system
   hostnames:
   - grafana.prakriti.website
   rules:
