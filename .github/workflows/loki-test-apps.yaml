@@ -13,11 +13,15 @@ env:
 
 jobs:
   build-and-push:
-    name: Build & Push Images to GAR
+    name: Build & Push ${{ matrix.service }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write # Required for requesting the OIDC JWT token
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [service-a, service-b, service-c, service-d, service-e]
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -40,58 +44,16 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
-      - name: Build and Push Service A
+      - name: Prepare Proto
+        if: matrix.service == 'service-c' || matrix.service == 'service-d'
+        run: cp -r test/proto test/${{ matrix.service }}/proto
+
+      - name: Build and Push Image
         uses: docker/build-push-action@v5
         with:
-          context: ./test/service-a
-          file: ./test/service-a/Dockerfile
+          context: ./test/${{ matrix.service }}
+          file: ./test/${{ matrix.service }}/Dockerfile
           push: true
-          tags: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/service-a/service-a:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and Push Service B
-        uses: docker/build-push-action@v5
-        with:
-          context: ./test/service-b
-          file: ./test/service-b/Dockerfile
-          push: true
-          tags: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/service-b/service-b:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Prepare Service C Proto
-        run: cp -r test/proto test/service-c/proto
-
-      - name: Build and Push Service C
-        uses: docker/build-push-action@v5
-        with:
-          context: ./test/service-c
-          file: ./test/service-c/Dockerfile
-          push: true
-          tags: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/service-c/service-c:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Prepare Service D Proto
-        run: cp -r test/proto test/service-d/proto
-
-      - name: Build and Push Service D
-        uses: docker/build-push-action@v5
-        with:
-          context: ./test/service-d
-          file: ./test/service-d/Dockerfile
-          push: true
-          tags: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/service-d/service-d:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and Push Service E
-        uses: docker/build-push-action@v5
-        with:
-          context: ./test/service-e
-          file: ./test/service-e/Dockerfile
-          push: true
-          tags: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/service-e/service-e:latest
+          tags: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ matrix.service }}/${{ matrix.service }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
