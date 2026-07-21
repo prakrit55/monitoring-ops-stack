@@ -1,0 +1,22 @@
+# Node.js
+node_modules/
+dist/
+.oxlintrc.json
+
+# Go
+*.exe
+*.test
+*.prof
+
+# Python
+__pycache__/
+*.pyc
+
+# Local Proto Copies
+test/service-c/proto
+test/service-d/proto
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup

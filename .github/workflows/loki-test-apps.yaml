@@ -60,6 +60,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Prepare Service C Proto
+        run: cp -r test/proto test/service-c/proto
+
       - name: Build and Push Service C
         uses: docker/build-push-action@v5
         with:
@@ -69,6 +72,9 @@ jobs:
           tags: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/service-c/service-c:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Prepare Service D Proto
+        run: cp -r test/proto test/service-d/proto
 
       - name: Build and Push Service D
         uses: docker/build-push-action@v5
