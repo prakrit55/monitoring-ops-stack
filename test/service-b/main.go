@@ -5,16 +5,25 @@ import (
 	"encoding/json"
 	"log/slog"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"time"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/metric"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
+
+	"google.golang.org/grpc"
+	"service-b/pb"
 )
 
 // MultiHandler forwards log records to multiple underlying slog Handlers.
@@ -61,7 +70,7 @@ func initLogger(serviceName string) (func(context.Context) error, slog.Handler) 
 	consoleHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})
-
+ 
 	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if otelEndpoint == "" {
 		slog.Info("OTEL_EXPORTER_OTLP_ENDPOINT not set; logging to stdout only")
@@ -132,7 +141,23 @@ func main() {
 	// Seed local random generator
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	metricsShutdown, err := initMetrics(context.Background(), "service-b", otelEndpoint)
+	if err != nil {
+		slog.Error("failed to initialize metrics", "error", err)
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := metricsShutdown(ctx); err != nil {
+				slog.Error("failed to shutdown meter provider", "error", err)
+			}
+		}()
+	}
+
+	meter := otel.Meter("service-b")
+
+	http.HandleFunc("/", instrumentHandler(meter, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
@@ -140,9 +165,9 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"up","service":"service-b"}`))
-	})
+	}, "/"))
 
-	http.HandleFunc("/process", func(w http.ResponseWriter, req *http.Request) {
+	http.HandleFunc("/process", instrumentHandler(meter, func(w http.ResponseWriter, req *http.Request) {
 		correlationID := req.Header.Get("X-Correlation-Id")
 		if correlationID == "" {
 			correlationID = "unknown"
@@ -198,11 +223,172 @@ func main() {
 			"latency_ms":     latency.Milliseconds(),
 			"correlation_id": correlationID,
 		})
-	})
+	}, "/process"))
+
+	// Start gRPC server
+	lis, err := net.Listen("tcp", ":50052")
+	if err != nil {
+		slog.Error("failed to listen for gRPC", "error", err)
+	} else {
+		grpcServer := grpc.NewServer()
+		pb.RegisterServiceBServer(grpcServer, &serviceBServer{})
+		go func() {
+			slog.Info("Service B gRPC server starting", "port", "50052")
+			if err := grpcServer.Serve(lis); err != nil {
+				slog.Error("gRPC server failed", "error", err)
+			}
+		}()
+	}
 
 	slog.Info("Service B starting", "port", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		slog.Error("Service B failed to start", "error", err.Error())
 		os.Exit(1)
+	}
+}
+
+type serviceBServer struct {
+	pb.UnimplementedServiceBServer
+}
+
+func (s *serviceBServer) CallServiceB(ctx context.Context, req *pb.ServiceBRequest) (*pb.ServiceBResponse, error) {
+	correlationID := req.CorrelationId
+	if correlationID == "" {
+		correlationID = "unknown"
+	}
+
+	slog.Info("Service B gRPC processing request started",
+		"correlation_id", correlationID,
+	)
+
+	// Simulate processing latency: 50ms - 250ms
+	latency := time.Duration(50+rand.Intn(200)) * time.Millisecond
+	time.Sleep(latency)
+
+	chance := rand.Float64()
+	if chance < 0.05 {
+		slog.Error("simulated database failure",
+			"correlation_id", correlationID,
+			"error", "connection refused by database pool",
+			"table", "users",
+		)
+		return &pb.ServiceBResponse{
+			Status:      "error: database transaction failed",
+			ProcessedBy: "service-b",
+			LatencyMs:   latency.Milliseconds(),
+		}, nil
+	}
+
+	if chance < 0.20 {
+		slog.Warn("slow query performance warning",
+			"correlation_id", correlationID,
+			"latency_ms", latency.Milliseconds(),
+			"query", "SELECT * FROM users WHERE status = 'active'",
+		)
+	}
+
+	slog.Info("Service B gRPC processing request completed",
+		"correlation_id", correlationID,
+		"status", "success",
+		"latency_ms", latency.Milliseconds(),
+	)
+
+	return &pb.ServiceBResponse{
+		Status:      "success",
+		ProcessedBy: "service-b",
+		LatencyMs:   latency.Milliseconds(),
+	}, nil
+}
+
+func initMetrics(ctx context.Context, serviceName, otelEndpoint string) (func(context.Context) error, error) {
+	if otelEndpoint == "" {
+		slog.Info("OTEL_EXPORTER_OTLP_ENDPOINT not set; metrics exporter disabled")
+		return func(ctx context.Context) error { return nil }, nil
+	}
+
+	slog.Info("Initializing OTLP metric exporter", "endpoint", otelEndpoint)
+	exporter, err := otlpmetrichttp.New(ctx,
+		otlpmetrichttp.WithEndpoint(otelEndpoint),
+		otlpmetrichttp.WithInsecure(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(serviceName),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	mp := sdkmetric.NewMeterProvider(
+		sdkmetric.WithResource(res),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(15*time.Second))),
+	)
+	otel.SetMeterProvider(mp)
+
+	return func(shutdownCtx context.Context) error {
+		return mp.Shutdown(shutdownCtx)
+	}, nil
+}
+
+type responseWriterWrapper struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriterWrapper) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func instrumentHandler(meter metric.Meter, next http.HandlerFunc, path string) http.HandlerFunc {
+	requestCounter, err := meter.Int64Counter("http_requests_total",
+		metric.WithDescription("Total number of HTTP requests received"),
+		metric.WithUnit("1"),
+	)
+	if err != nil {
+		slog.Error("failed to create request counter", "error", err)
+	}
+
+	requestDuration, err := meter.Float64Histogram("http_request_duration_seconds",
+		metric.WithDescription("Duration of HTTP requests in seconds"),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		slog.Error("failed to create request duration histogram", "error", err)
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Correlation-Id")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		start := time.Now()
+		rw := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
+
+		next(rw, r)
+
+		duration := time.Since(start).Seconds()
+		attrs := []attribute.KeyValue{
+			attribute.String("http.method", r.Method),
+			attribute.String("http.route", path),
+			attribute.Int("http.status_code", rw.statusCode),
+		}
+
+		if requestCounter != nil {
+			requestCounter.Add(r.Context(), 1, metric.WithAttributes(attrs...))
+		}
+		if requestDuration != nil {
+			requestDuration.Record(r.Context(), duration, metric.WithAttributes(attrs...))
+		}
 	}
 }

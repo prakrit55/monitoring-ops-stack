@@ -1,0 +1,24 @@
+replicaCount: 1
+
+image:
+  repository: us-central1-docker.pkg.dev/k8s-staging-252732/service-e/service-e
+  pullPolicy: Always
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+
+env: {}
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi

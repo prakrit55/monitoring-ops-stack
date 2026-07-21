@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package = "./;pb";
+
+service ServiceA {
+  rpc CallServiceA (ServiceARequest) returns (ServiceAResponse);
+}
+
+service ServiceB {
+  rpc CallServiceB (ServiceBRequest) returns (ServiceBResponse);
+}
+
+message ServiceARequest {
+  string name = 1;
+}
+
+message ServiceAResponse {
+  string message = 1;
+  string correlation_id = 2;
+  string service_b_response = 3;
+}
+
+message ServiceBRequest {
+  string correlation_id = 1;
+}
+
+message ServiceBResponse {
+  string status = 1;
+  string processed_by = 2;
+  int64 latency_ms = 3;
+}

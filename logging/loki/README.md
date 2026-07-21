@@ -81,6 +81,7 @@ kubectl create namespace monitoring
 ### 1. Add Helm Repositories
 ```bash
 helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 helm repo update
 ```
 
@@ -102,7 +103,14 @@ Deploy Grafana with only the Loki datasource pre-configured, and exposed via Clu
 helm upgrade --install monitoring prometheus-community/kube-prometheus-stack --version 72.6.2 --namespace monitoring --values helm-values/prometheus-grafana-stack.yaml --wait
 ```
 
-### 5. Apply GKE Gateway Manifests
+### 5. Deploy OpenTelemetry Collector
+Deploy the OpenTelemetry Collector to receive OTLP logs from applications and forward them to Loki:
+```bash
+helm upgrade --install opentelemetry-collector open-telemetry/opentelemetry-collector --namespace monitoring --values helm-values/otel-loki-values.yaml --wait
+```
+
+### 6. Apply GKE Gateway Manifests
+
 
 #### 🌐 Shared Gateway Routing Architecture
 To implement separation of concerns and reduce ingress resource costs, we deploy a single shared gateway (`default-gateway`) inside a central, platform-admin namespace (`gateway-system`). Application-native HTTPRoutes then reside locally inside their respective workspaces (`monitoring`, `cattle-system`):

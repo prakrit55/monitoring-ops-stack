@@ -171,10 +171,12 @@ To configure and run the workflow:
    - You can also manually trigger it via the **Actions** tab using the `workflow_dispatch` button.
 
 ### Apply Manifests
-Deploy the applications to your GKE or Kubernetes cluster under the `monitoring` namespace:
+
+Deploy the applications to your GKE or Kubernetes cluster under the `monitoring` namespace using Kustomize (which dynamically compiles the local Helm charts for each service):
 
 ```bash
-kubectl apply -f k8s-manifests.yaml
+# Make sure you are in the test/ directory
+kubectl apply -k . --enable-helm
 ```
 
 Verify the pods are running:

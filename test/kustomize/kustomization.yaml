@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: test
+
+helmGlobals:
+  chartHome: ./helm
+
+helmCharts:
+  - name: service-a
+    releaseName: service-a
+    version: 0.1.0
+    namespace: test
+  - name: service-b
+    releaseName: service-b
+    version: 0.1.0
+    namespace: test
+  - name: service-c
+    releaseName: service-c
+    version: 0.1.0
+    namespace: test
+  - name: service-d
+    releaseName: service-d
+    version: 0.1.0
+    namespace: test
+  - name: service-e
+    releaseName: service-e
+    version: 0.1.0
+    namespace: test

@@ -1,0 +1,28 @@
+replicaCount: 1
+
+image:
+  repository: us-central1-docker.pkg.dev/k8s-staging-252732/service-c/service-c
+  pullPolicy: Always
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082
+      protocol: TCP
+
+env:
+  PORT: "8082"
+  SERVICE_A_GRPC_URL: "service-a.{{ .Release.Namespace }}.svc.cluster.local:50051"
+  SERVICE_B_GRPC_URL: "service-b.{{ .Release.Namespace }}.svc.cluster.local:50052"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "opentelemetry-collector.monitoring.svc.cluster.local:4318"
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi

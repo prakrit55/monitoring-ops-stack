@@ -34,6 +34,14 @@ config:
       compression: gzip
       tls:
         insecure: true
+    otlp/tempo:
+      endpoint: "tempo.monitoring.svc.cluster.local:4317"
+      tls:
+        insecure: true
+    prometheusremotewrite:
+      endpoint: "http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
+      tls:
+        insecure: true
 
   service:
     pipelines:
@@ -41,3 +49,11 @@ config:
         receivers: [otlp]
         processors: [memory_limiter, resourcedetection, batch]
         exporters: [otlphttp/loki]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, resourcedetection, batch]
+        exporters: [prometheusremotewrite]
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, resourcedetection, batch]
+        exporters: [otlp/tempo]

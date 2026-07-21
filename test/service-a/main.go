@@ -8,16 +8,25 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"time"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/metric"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
+
+	"google.golang.org/grpc"
+	"service-a/pb"
 )
 
 // MultiHandler forwards log records to multiple underlying slog Handlers.
@@ -146,7 +155,23 @@ func main() {
 		serviceBURL = "http://localhost:8081/process"
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	metricsShutdown, err := initMetrics(context.Background(), "service-a", otelEndpoint)
+	if err != nil {
+		slog.Error("failed to initialize metrics", "error", err)
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := metricsShutdown(ctx); err != nil {
+				slog.Error("failed to shutdown meter provider", "error", err)
+			}
+		}()
+	}
+
+	meter := otel.Meter("service-a")
+
+	http.HandleFunc("/", instrumentHandler(meter, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
@@ -154,9 +179,9 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"up","service":"service-a"}`))
-	})
+	}, "/"))
 
-	http.HandleFunc("/api/hello", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/hello", instrumentHandler(meter, func(w http.ResponseWriter, r *http.Request) {
 		correlationID := r.Header.Get("X-Correlation-Id")
 		if correlationID == "" {
 			correlationID = generateCorrelationID()
@@ -237,13 +262,76 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(responsePayload)
-	})
+	}, "/api/hello"))
+
+	serviceBGrpcURL := os.Getenv("SERVICE_B_GRPC_URL")
+	if serviceBGrpcURL == "" {
+		serviceBGrpcURL = "localhost:50052"
+	}
+
+	// Start gRPC server
+	lis, err := net.Listen("tcp", ":50051")
+	if err != nil {
+		slog.Error("failed to listen for gRPC", "error", err)
+	} else {
+		grpcServer := grpc.NewServer()
+		pb.RegisterServiceAServer(grpcServer, &serviceAServer{serviceBGrpcURL: serviceBGrpcURL})
+		go func() {
+			slog.Info("Service A gRPC server starting", "port", "50051")
+			if err := grpcServer.Serve(lis); err != nil {
+				slog.Error("gRPC server failed", "error", err)
+			}
+		}()
+	}
 
 	slog.Info("Service A starting", "port", port, "service_b_url", serviceBURL)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		slog.Error("Service A failed to start", "error", err.Error())
 		os.Exit(1)
 	}
+}
+
+type serviceAServer struct {
+	pb.UnimplementedServiceAServer
+	serviceBGrpcURL string
+}
+
+func (s *serviceAServer) CallServiceA(ctx context.Context, req *pb.ServiceARequest) (*pb.ServiceAResponse, error) {
+	correlationID := generateCorrelationID()
+	slog.Info("received gRPC request to CallServiceA",
+		"correlation_id", correlationID,
+		"name", req.Name,
+	)
+
+	// Call Service B over gRPC
+	slog.Info("sending gRPC request to Service B",
+		"correlation_id", correlationID,
+		"url", s.serviceBGrpcURL,
+	)
+
+	conn, err := grpc.Dial(s.serviceBGrpcURL, grpc.WithInsecure(), grpc.WithBlock(), grpc.WithTimeout(5*time.Second))
+	var serviceBResponse string
+	if err != nil {
+		slog.Error("failed to connect to Service B gRPC", "error", err, "correlation_id", correlationID)
+		serviceBResponse = fmt.Sprintf("Failed to reach Service B via gRPC: %v", err)
+	} else {
+		defer conn.Close()
+		client := pb.NewServiceBClient(conn)
+		resp, err := client.CallServiceB(ctx, &pb.ServiceBRequest{CorrelationId: correlationID})
+		if err != nil {
+			slog.Error("failed to call Service B gRPC", "error", err, "correlation_id", correlationID)
+			serviceBResponse = fmt.Sprintf("Failed to call Service B: %v", err)
+		} else {
+			slog.Info("received gRPC response from Service B", "correlation_id", correlationID, "status", resp.Status)
+			serviceBResponse = fmt.Sprintf("Success: processed by %s in %dms", resp.ProcessedBy, resp.LatencyMs)
+		}
+	}
+
+	return &pb.ServiceAResponse{
+		Message:          fmt.Sprintf("Hello %s from Service A via gRPC!", req.Name),
+		CorrelationId:    correlationID,
+		ServiceBResponse: serviceBResponse,
+	}, nil
 }
 
 func respondWithError(w http.ResponseWriter, correlationID, msg string, code int) {
@@ -253,4 +341,97 @@ func respondWithError(w http.ResponseWriter, correlationID, msg string, code int
 		"error":          msg,
 		"correlation_id": correlationID,
 	})
+}
+
+func initMetrics(ctx context.Context, serviceName, otelEndpoint string) (func(context.Context) error, error) {
+	if otelEndpoint == "" {
+		slog.Info("OTEL_EXPORTER_OTLP_ENDPOINT not set; metrics exporter disabled")
+		return func(ctx context.Context) error { return nil }, nil
+	}
+
+	slog.Info("Initializing OTLP metric exporter", "endpoint", otelEndpoint)
+	exporter, err := otlpmetrichttp.New(ctx,
+		otlpmetrichttp.WithEndpoint(otelEndpoint),
+		otlpmetrichttp.WithInsecure(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String(serviceName),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	mp := sdkmetric.NewMeterProvider(
+		sdkmetric.WithResource(res),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(15*time.Second))),
+	)
+	otel.SetMeterProvider(mp)
+
+	return func(shutdownCtx context.Context) error {
+		return mp.Shutdown(shutdownCtx)
+	}, nil
+}
+
+type responseWriterWrapper struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriterWrapper) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func instrumentHandler(meter metric.Meter, next http.HandlerFunc, path string) http.HandlerFunc {
+	requestCounter, err := meter.Int64Counter("http_requests_total",
+		metric.WithDescription("Total number of HTTP requests received"),
+		metric.WithUnit("1"),
+	)
+	if err != nil {
+		slog.Error("failed to create request counter", "error", err)
+	}
+
+	requestDuration, err := meter.Float64Histogram("http_request_duration_seconds",
+		metric.WithDescription("Duration of HTTP requests in seconds"),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		slog.Error("failed to create request duration histogram", "error", err)
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Correlation-Id")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		start := time.Now()
+		rw := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
+
+		next(rw, r)
+
+		duration := time.Since(start).Seconds()
+		attrs := []attribute.KeyValue{
+			attribute.String("http.method", r.Method),
+			attribute.String("http.route", path),
+			attribute.Int("http.status_code", rw.statusCode),
+		}
+
+		if requestCounter != nil {
+			requestCounter.Add(r.Context(), 1, metric.WithAttributes(attrs...))
+		}
+		if requestDuration != nil {
+			requestDuration.Record(r.Context(), duration, metric.WithAttributes(attrs...))
+		}
+	}
 }

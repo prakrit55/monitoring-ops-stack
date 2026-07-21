@@ -1,0 +1,6 @@
+apiVersion: v2
+name: service-c
+description: A Helm chart to deploy service-c
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
