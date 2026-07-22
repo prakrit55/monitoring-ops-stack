@@ -129,7 +129,7 @@ export default function App() {
     
     // Construct request details
     let url = `${endpoints[serviceKey]}${route}`;
-    if (serviceKey !== 'serviceA') {
+    if (serviceKey !== 'serviceA' && method === 'GET') {
       url += `?name=${encodeURIComponent(nameInput)}`;
     }
     
@@ -152,11 +152,16 @@ export default function App() {
         headers['X-Correlation-Id'] = correlationId;
       }
 
-      const res = await fetch(url, {
+      const options: RequestInit = {
         method,
         headers,
         mode: 'cors',
-      });
+      };
+      if (method === 'POST') {
+        options.body = JSON.stringify({ name: nameInput });
+      }
+
+      const res = await fetch(url, options);
       
       const text = await res.text();
       const elapsed = Date.now() - startTime;
@@ -448,13 +453,24 @@ export default function App() {
                     <h3>HTTP Pipeline: Service A ➔ Service B</h3>
                     <span className="badge http">HTTP</span>
                   </div>
-                  <button 
-                    className="btn-primary" 
-                    disabled={loading || statuses.serviceA.status === 'DOWN'}
-                    onClick={() => handleServiceCall('serviceA', '/api/hello')}
-                  >
-                    {loading ? 'Processing...' : 'Send HTTP Request to Service A'}
-                  </button>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <button 
+                      className="btn-primary" 
+                      disabled={loading || statuses.serviceA.status === 'DOWN'}
+                      onClick={() => handleServiceCall('serviceA', '/api/hello', 'GET')}
+                      style={{ background: 'linear-gradient(135deg, var(--accent-blue) 0%, rgba(0, 210, 255, 0.6) 100%)' }}
+                    >
+                      {loading ? '...' : 'GET Request'}
+                    </button>
+                    <button 
+                      className="btn-primary" 
+                      disabled={loading || statuses.serviceA.status === 'DOWN'}
+                      onClick={() => handleServiceCall('serviceA', '/api/hello', 'POST')}
+                      style={{ background: 'linear-gradient(135deg, var(--accent-purple) 0%, rgba(157, 78, 221, 0.6) 100%)' }}
+                    >
+                      {loading ? '...' : 'POST Request'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Service C flow */}
@@ -463,13 +479,24 @@ export default function App() {
                     <h3>gRPC Pipeline: Service C ➔ Service A ➔ Service B</h3>
                     <span className="badge grpc">gRPC Link</span>
                   </div>
-                  <button 
-                    className="btn-primary" 
-                    disabled={loading || statuses.serviceC.status === 'DOWN'}
-                    onClick={() => handleServiceCall('serviceC', '/call-grpc')}
-                  >
-                    {loading ? 'Processing...' : 'Send gRPC Flow via Service C'}
-                  </button>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <button 
+                      className="btn-primary" 
+                      disabled={loading || statuses.serviceC.status === 'DOWN'}
+                      onClick={() => handleServiceCall('serviceC', '/call-grpc', 'GET')}
+                      style={{ background: 'linear-gradient(135deg, var(--accent-blue) 0%, rgba(0, 210, 255, 0.6) 100%)' }}
+                    >
+                      {loading ? '...' : 'GET Flow'}
+                    </button>
+                    <button 
+                      className="btn-primary" 
+                      disabled={loading || statuses.serviceC.status === 'DOWN'}
+                      onClick={() => handleServiceCall('serviceC', '/call-grpc', 'POST')}
+                      style={{ background: 'linear-gradient(135deg, var(--accent-purple) 0%, rgba(157, 78, 221, 0.6) 100%)' }}
+                    >
+                      {loading ? '...' : 'POST Flow'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Service D flow */}
@@ -478,13 +505,24 @@ export default function App() {
                     <h3>gRPC Pipeline: Service D ➔ Service A ➔ Service B</h3>
                     <span className="badge grpc">gRPC Link</span>
                   </div>
-                  <button 
-                    className="btn-primary" 
-                    disabled={loading || statuses.serviceD.status === 'DOWN'}
-                    onClick={() => handleServiceCall('serviceD', '/call-grpc')}
-                  >
-                    {loading ? 'Processing...' : 'Send gRPC Flow via Service D'}
-                  </button>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <button 
+                      className="btn-primary" 
+                      disabled={loading || statuses.serviceD.status === 'DOWN'}
+                      onClick={() => handleServiceCall('serviceD', '/call-grpc', 'GET')}
+                      style={{ background: 'linear-gradient(135deg, var(--accent-blue) 0%, rgba(0, 210, 255, 0.6) 100%)' }}
+                    >
+                      {loading ? '...' : 'GET Flow'}
+                    </button>
+                    <button 
+                      className="btn-primary" 
+                      disabled={loading || statuses.serviceD.status === 'DOWN'}
+                      onClick={() => handleServiceCall('serviceD', '/call-grpc', 'POST')}
+                      style={{ background: 'linear-gradient(135deg, var(--accent-purple) 0%, rgba(157, 78, 221, 0.6) 100%)' }}
+                    >
+                      {loading ? '...' : 'POST Flow'}
+                    </button>
+                  </div>
                 </div>
 
               </div>

@@ -63,6 +63,8 @@ const clientB = new pb.ServiceB(serviceBUrl, grpc.credentials.createInsecure());
 const app = express();
 const port = process.env.PORT || '8082';
 
+app.use(express.json());
+
 // Middleware for metrics instrumentation and CORS
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -99,8 +101,8 @@ app.get('/', (req: Request, res: Response) => {
   res.json({ status: 'up', service: 'service-c' });
 });
 
-app.get('/call-grpc', (req: Request, res: Response) => {
-  const name = (req.query.name as string) || 'TypeScript Client';
+app.all('/call-grpc', (req: Request, res: Response) => {
+  const name = req.body?.name || (req.query.name as string) || 'TypeScript Client';
   console.log(`Received request /call-grpc, calling Service A via gRPC at ${serviceAUrl}`);
 
   clientA.CallServiceA({ name: name }, (err: any, responseA: any) => {

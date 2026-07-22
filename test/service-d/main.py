@@ -79,9 +79,13 @@ def record_metrics(response):
 def index():
     return jsonify({"status": "up", "service": "service-d"})
 
-@app.route("/call-grpc")
+@app.route("/call-grpc", methods=['GET', 'POST'])
 def call_grpc():
-    name = request.args.get("name", "Python Client")
+    name = None
+    if request.is_json:
+        name = request.json.get("name")
+    if not name:
+        name = request.args.get("name", "Python Client")
     print(f"Received request to /call-grpc, calling Service A via gRPC at {service_a_url}")
     
     try:

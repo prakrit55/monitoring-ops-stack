@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -187,15 +188,38 @@ func main() {
 			correlationID = generateCorrelationID()
 		}
 
+		var name string = "Go Client"
+		var bodyReader io.Reader = nil
+
+		if r.Method == http.MethodPost {
+			var body struct {
+				Name string `json:"name"`
+			}
+			bodyBytes, err := io.ReadAll(r.Body)
+			if err == nil {
+				_ = json.Unmarshal(bodyBytes, &body)
+				if body.Name != "" {
+					name = body.Name
+				}
+				// Re-encode body bytes for service-b
+				bodyReader = bytes.NewReader(bodyBytes)
+			}
+		} else {
+			if n := r.URL.Query().Get("name"); n != "" {
+				name = n
+			}
+		}
+
 		slog.Info("received request to /api/hello",
 			"correlation_id", correlationID,
 			"method", r.Method,
 			"path", r.URL.Path,
+			"name", name,
 			"client_ip", r.RemoteAddr,
 			"user_agent", r.UserAgent(),
 		)
 
-		req, err := http.NewRequestWithContext(r.Context(), "GET", serviceBURL, nil)
+		req, err := http.NewRequestWithContext(r.Context(), r.Method, serviceBURL, bodyReader)
 		if err != nil {
 			slog.Error("failed to create request to Service B",
 				"correlation_id", correlationID,
@@ -204,10 +228,16 @@ func main() {
 			respondWithError(w, correlationID, "Internal creation error", http.StatusInternalServerError)
 			return
 		}
+		
+		// If POST, set Content-Type header
+		if r.Method == http.MethodPost {
+			req.Header.Set("Content-Type", "application/json")
+		}
 		req.Header.Set("X-Correlation-Id", correlationID)
 
 		slog.Info("sending request to Service B",
 			"correlation_id", correlationID,
+			"method", r.Method,
 			"url", serviceBURL,
 		)
 
@@ -252,7 +282,7 @@ func main() {
 		}
 
 		responsePayload := map[string]interface{}{
-			"message":            "Hello from Service A!",
+			"message":            fmt.Sprintf("Hello %s from Service A via HTTP (%s)!", name, r.Method),
 			"correlation_id":     correlationID,
 			"service_b_status":   resp.StatusCode,
 			"service_b_response": bResponse,
