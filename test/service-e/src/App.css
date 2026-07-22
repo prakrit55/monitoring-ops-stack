@@ -647,3 +647,79 @@ body {
     offset-distance: 100%;
   }
 }
+
+/* Poke Button Premium Styles */
+.poke-service-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+  font-weight: 600;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.poke-service-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  z-index: 0;
+}
+
+.poke-service-btn span {
+  position: relative;
+  z-index: 1;
+}
+
+.poke-service-btn:hover:not(:disabled) {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.4);
+  transform: translateY(-1.5px) scale(1.05);
+}
+
+.poke-service-btn:hover:not(:disabled)::before {
+  opacity: 0.2;
+}
+
+.poke-service-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.95);
+}
+
+.poke-service-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Polishing status widgets */
+.status-item {
+  border-left: 3px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.status-item:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.status-item:has(.ping-circle.up) {
+  border-left: 3px solid var(--status-up);
+}
+
+.status-item:has(.ping-circle.down) {
+  border-left: 3px solid var(--status-down);
+}
+

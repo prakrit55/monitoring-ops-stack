@@ -295,7 +295,7 @@ export default function App() {
                     <h4>{svc.name}</h4>
                     <p>Port: {svc.port} | {svc.lang}</p>
                   </div>
-                  <div className="status-indicator" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div className="status-indicator" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <span className={`ping-circle ${svc.status.toLowerCase()}`}></span>
                     <span className={`ping-label ${svc.status.toLowerCase()}`}>{svc.status}</span>
                     <button 
@@ -303,19 +303,8 @@ export default function App() {
                       onClick={() => handlePokeService(key as 'serviceA' | 'serviceB' | 'serviceC' | 'serviceD')}
                       disabled={loading || svc.checking}
                       title={`Poke ${svc.name} directly`}
-                      style={{
-                        padding: '0.25rem 0.5rem',
-                        fontSize: '0.8rem',
-                        borderRadius: '4px',
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid rgba(255,255,255,0.15)',
-                        color: 'white',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        marginLeft: '0.5rem'
-                      }}
                     >
-                      ⚡
+                      <span>⚡ Poke</span>
                     </button>
                   </div>
                 </div>
