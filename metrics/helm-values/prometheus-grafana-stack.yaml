@@ -1,0 +1,35 @@
+prometheus:
+  enabled: true
+  prometheusSpec:
+    # Enable remote write receiver for OpenTelemetry metrics (default: false)
+    enableRemoteWriteReceiver: true
+    # Enable exemplar storage for linking metrics to traces (default: [])
+    enableFeatures:
+      - exemplar-storage
+      - native-histograms
+
+grafana:
+  enabled: true
+  service:
+    type: ClusterIP
+
+  # Enable anonymous access for demo (default: requires login)
+  grafana.ini:
+    auth.anonymous:
+      enabled: true
+      org_role: Admin
+    auth:
+      disable_login_form: true
+
+# Keep resource footprint light by disabling optional stack components
+alertmanager:
+  enabled: false
+
+nodeExporter:
+  enabled: true
+
+prometheus-node-exporter:
+  enabled: false
+
+kubeStateMetrics:
+  enabled: true

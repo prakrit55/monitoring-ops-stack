@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - gateway-routes/gateway.yaml
+  - gateway-routes/grafana-certificate.yaml
+  - gateway-routes/grafana-httproute.yaml
+  - gateway-routes/grafana-healthcheck.yaml
+  - gateway-routes/loki-test-certificate.yaml
+  - gateway-routes/loki-test-httproute.yaml
+
+helmCharts:
+  - name: loki
+    repo: https://grafana.github.io/helm-charts
+    releaseName: loki
+    valuesFile: helm-values/loki-values.yaml
+    namespace: monitoring
+  - name: alloy
+    repo: https://grafana.github.io/helm-charts
+    releaseName: alloy
+    valuesFile: helm-values/alloy-values.yaml
+    namespace: monitoring
+  - name: kube-prometheus-stack
+    repo: https://prometheus-community.github.io/helm-charts
+    releaseName: monitoring
+    version: 72.6.2
+    valuesFile: helm-values/prometheus-grafana-stack.yaml
+    namespace: monitoring
+    includeCRDs: true
+  - name: opentelemetry-collector
+    repo: https://open-telemetry.github.io/opentelemetry-helm-charts
+    releaseName: opentelemetry-collector
+    valuesFile: helm-values/otel-loki-values.yaml
+    namespace: monitoring

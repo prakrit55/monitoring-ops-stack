@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - gateway/gateway.yaml
+  - gateway/grafana-certificate.yaml
+  - gateway/grafana-httproute.yaml
+  - gateway/grafana-healthcheck.yaml
+  - gateway/cluster-issuer.yaml
+
+helmCharts:
+  - name: kube-prometheus-stack
+    repo: https://prometheus-community.github.io/helm-charts
+    releaseName: monitoring
+    version: 72.6.2
+    valuesFile: helm-values/prometheus-grafana-stack.yaml
+    namespace: monitoring
+    includeCRDs: true
+
+patches:
+  - path: gateway/grafana-patch.yaml
