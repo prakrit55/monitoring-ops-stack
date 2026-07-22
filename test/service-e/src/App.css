@@ -648,10 +648,106 @@ body {
   }
 }
 
-/* Poke Button Premium Styles */
-.poke-service-btn {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.8rem;
+/* Premium Status Card Design */
+.status-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.status-card {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-left: 3px solid rgba(255, 255, 255, 0.05);
+}
+
+.status-card:hover {
+  background: rgba(255, 255, 255, 0.02);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.status-card:has(.ping-circle.up) {
+  border-left-color: var(--status-up);
+}
+
+.status-card:has(.ping-circle.down) {
+  border-left-color: var(--status-down);
+}
+
+.status-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.service-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.service-lang-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+.service-lang-badge.serviceA,
+.service-lang-badge.serviceB {
+  background: rgba(0, 210, 255, 0.1);
+  color: var(--accent-blue);
+  border: 1px solid rgba(0, 210, 255, 0.2);
+}
+
+.service-lang-badge.serviceC {
+  background: rgba(157, 78, 221, 0.1);
+  color: var(--accent-purple);
+  border: 1px solid rgba(157, 78, 221, 0.2);
+}
+
+.service-lang-badge.serviceD {
+  background: rgba(247, 37, 133, 0.1);
+  color: var(--flow-pulse);
+  border: 1px solid rgba(247, 37, 133, 0.2);
+}
+
+.status-card-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.port-info code {
+  font-family: 'Fira Code', monospace;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Full Width Poke Button */
+.poke-btn-full {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
   font-family: inherit;
   font-weight: 600;
   border-radius: 8px;
@@ -659,15 +755,16 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--text-primary);
   cursor: pointer;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  margin-top: auto;
 }
 
-.poke-service-btn::before {
+.poke-btn-full::before {
   content: '';
   position: absolute;
   top: 0;
@@ -680,46 +777,28 @@ body {
   z-index: 0;
 }
 
-.poke-service-btn span {
+.poke-btn-full span {
   position: relative;
   z-index: 1;
 }
 
-.poke-service-btn:hover:not(:disabled) {
+.poke-btn-full:hover:not(:disabled) {
   border-color: var(--accent-blue);
-  box-shadow: 0 0 12px rgba(0, 210, 255, 0.4);
-  transform: translateY(-1.5px) scale(1.05);
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.35);
+  transform: translateY(-1px);
 }
 
-.poke-service-btn:hover:not(:disabled)::before {
-  opacity: 0.2;
+.poke-btn-full:hover:not(:disabled)::before {
+  opacity: 0.15;
 }
 
-.poke-service-btn:active:not(:disabled) {
-  transform: translateY(0) scale(0.95);
+.poke-btn-full:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
 }
 
-.poke-service-btn:disabled {
+.poke-btn-full:disabled {
   opacity: 0.3;
   cursor: not-allowed;
 }
 
-/* Polishing status widgets */
-.status-item {
-  border-left: 3px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.status-item:hover {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  border-color: rgba(255, 255, 255, 0.2) !important;
-}
-
-.status-item:has(.ping-circle.up) {
-  border-left: 3px solid var(--status-up);
-}
-
-.status-item:has(.ping-circle.down) {
-  border-left: 3px solid var(--status-down);
-}
 

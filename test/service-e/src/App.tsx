@@ -290,23 +290,32 @@ export default function App() {
             </h2>
             <div className="status-list">
               {Object.entries(statuses).map(([key, svc]) => (
-                <div key={key} className="status-item">
-                  <div className="status-info">
-                    <h4>{svc.name}</h4>
-                    <p>Port: {svc.port} | {svc.lang}</p>
+                <div key={key} className="status-card">
+                  <div className="status-card-header">
+                    <span className="service-name">{svc.name}</span>
+                    <span className={`service-lang-badge ${key}`}>
+                      {svc.lang.split(' ')[0]}
+                    </span>
                   </div>
-                  <div className="status-indicator" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <span className={`ping-circle ${svc.status.toLowerCase()}`}></span>
-                    <span className={`ping-label ${svc.status.toLowerCase()}`}>{svc.status}</span>
-                    <button 
-                      className="poke-service-btn" 
-                      onClick={() => handlePokeService(key as 'serviceA' | 'serviceB' | 'serviceC' | 'serviceD')}
-                      disabled={loading || svc.checking}
-                      title={`Poke ${svc.name} directly`}
-                    >
-                      <span>⚡ Poke</span>
-                    </button>
+                  
+                  <div className="status-card-body">
+                    <div className="port-info">
+                      Port: <code>{svc.port}</code>
+                    </div>
+                    <div className="status-badge">
+                      <span className={`ping-circle ${svc.status.toLowerCase()}`}></span>
+                      <span className={`ping-label ${svc.status.toLowerCase()}`}>{svc.status}</span>
+                    </div>
                   </div>
+                  
+                  <button 
+                    className="poke-btn-full" 
+                    onClick={() => handlePokeService(key as 'serviceA' | 'serviceB' | 'serviceC' | 'serviceD')}
+                    disabled={loading || svc.checking}
+                    title={`Poke ${svc.name} directly`}
+                  >
+                    <span>⚡ Poke</span>
+                  </button>
                 </div>
               ))}
             </div>
