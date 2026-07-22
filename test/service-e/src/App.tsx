@@ -30,12 +30,12 @@ interface LogEntry {
 }
 
 export default function App() {
-  // Service configuration
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const [endpoints, setEndpoints] = useState<Endpoints>({
-    serviceA: localStorage.getItem('url_service_a') || 'http://localhost:8080',
-    serviceB: localStorage.getItem('url_service_b') || 'http://localhost:8081',
-    serviceC: localStorage.getItem('url_service_c') || 'http://localhost:8082',
-    serviceD: localStorage.getItem('url_service_d') || 'http://localhost:8083',
+    serviceA: (isLocal ? localStorage.getItem('url_service_a') : null) || (isLocal ? 'http://localhost:8080' : `${window.location.origin}/api/service-a`),
+    serviceB: (isLocal ? localStorage.getItem('url_service_b') : null) || (isLocal ? 'http://localhost:8081' : `${window.location.origin}/api/service-b`),
+    serviceC: (isLocal ? localStorage.getItem('url_service_c') : null) || (isLocal ? 'http://localhost:8082' : `${window.location.origin}/api/service-c`),
+    serviceD: (isLocal ? localStorage.getItem('url_service_d') : null) || (isLocal ? 'http://localhost:8083' : `${window.location.origin}/api/service-d`),
   });
 
   const [statuses, setStatuses] = useState<Record<string, ServiceStatus>>({
@@ -197,6 +197,66 @@ export default function App() {
     }
   };
 
+  const handlePokeService = async (serviceKey: 'serviceA' | 'serviceB' | 'serviceC' | 'serviceD') => {
+    setLoading(true);
+    const svc = statuses[serviceKey];
+    const url = endpoints[serviceKey];
+    const startTime = Date.now();
+    const correlationId = customCorrelationId.trim() || Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    
+    addLog({
+      timestamp: new Date().toLocaleTimeString(),
+      type: 'info',
+      service: svc.name,
+      method: 'GET',
+      url: url,
+      elapsedMs: 0,
+      correlationId,
+      body: `Poking service root endpoint...`
+    });
+
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-Correlation-Id': correlationId
+        },
+        mode: 'cors'
+      });
+      const elapsed = Date.now() - startTime;
+      const text = await res.text();
+      let parsedBody = text;
+      try {
+        parsedBody = JSON.stringify(JSON.parse(text), null, 2);
+      } catch (e) {}
+
+      addLog({
+        timestamp: new Date().toLocaleTimeString(),
+        type: res.ok ? 'success' : 'error',
+        service: svc.name,
+        method: 'GET',
+        url: url,
+        elapsedMs: elapsed,
+        statusCode: res.status,
+        correlationId,
+        body: parsedBody
+      });
+    } catch (err: any) {
+      const elapsed = Date.now() - startTime;
+      addLog({
+        timestamp: new Date().toLocaleTimeString(),
+        type: 'error',
+        service: svc.name,
+        method: 'GET',
+        url: url,
+        elapsedMs: elapsed,
+        body: `Poke failed: ${err.message}`
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     alert('Correlation ID copied to clipboard!');
@@ -235,9 +295,28 @@ export default function App() {
                     <h4>{svc.name}</h4>
                     <p>Port: {svc.port} | {svc.lang}</p>
                   </div>
-                  <div className="status-indicator">
+                  <div className="status-indicator" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span className={`ping-circle ${svc.status.toLowerCase()}`}></span>
                     <span className={`ping-label ${svc.status.toLowerCase()}`}>{svc.status}</span>
+                    <button 
+                      className="poke-service-btn" 
+                      onClick={() => handlePokeService(key as 'serviceA' | 'serviceB' | 'serviceC' | 'serviceD')}
+                      disabled={loading || svc.checking}
+                      title={`Poke ${svc.name} directly`}
+                      style={{
+                        padding: '0.25rem 0.5rem',
+                        fontSize: '0.8rem',
+                        borderRadius: '4px',
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        color: 'white',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        marginLeft: '0.5rem'
+                      }}
+                    >
+                      ⚡
+                    </button>
                   </div>
                 </div>
               ))}
