@@ -1,9 +1,5 @@
-- op: replace
-  path: /spec/listeners/1/tls/certificateRefs
+- op: add
+  path: /spec/listeners/1/tls/certificateRefs/-
   value:
-    - name: grafana-tls-secret # TLS Certificate for grafana.prakriti.website
-      kind: Secret
-    - name: loki-test-tls-secret # TLS Certificate for test.prakriti.website (test frontend)
-      kind: Secret
-    - name: prometheus-tls-secret # TLS Certificate for prometheus.prakriti.website
-      kind: Secret
+    name: loki-test-tls-secret
+    kind: Secret

@@ -7,7 +7,8 @@ resources:
   - grafana-httproute.yaml
   - grafana-healthcheck.yaml
   - cluster-issuer.yaml
-
+    
+# naming patches not to target
 patches:
   - path: grafana-route-patch.yaml
   - path: grafana-certificate-patch.yaml

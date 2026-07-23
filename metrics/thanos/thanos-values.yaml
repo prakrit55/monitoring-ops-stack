@@ -1,0 +1,29 @@
+# Helm values for Thanos Bitnami chart inside Kustomize
+image:
+  registry: quay.io
+  repository: thanos/thanos
+  tag: v0.35.1
+
+existingObjstoreSecret: thanos-objstore-secret
+
+# 1. Thanos Query: Global PromQL aggregator and deduplicator
+query:
+  enabled: true
+  stores:
+    - monitoring-prometheus-operated.monitoring.svc.cluster.local:10901
+    - thanos-storegateway.monitoring.svc.cluster.local:10901
+
+# 2. Thanos Store Gateway: Serves historical queries from GCS
+storegateway:
+  enabled: true
+  # Enable Workload Identity for historical queries
+  serviceAccount:
+    annotations:
+      iam.gke.io/gcp-service-account: "thanos-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com"
+
+# 3. Thanos Compact: Compacts and downsamples GCS historical data
+compact:
+  enabled: true
+  retentionResolutionRaw: 30d
+  retentionResolution5m: 90d
+  retentionResolution1h: 365d

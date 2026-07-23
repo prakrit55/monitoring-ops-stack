@@ -1,233 +1,286 @@
-# Loki Logging Test: Interconnected Go Applications
+# Interconnected Multi-Service Testbed (service-a to service-e)
 
-This test suite consists of two lightweight, containerized Go applications (`service-a` and `service-b`) designed to demonstrate end-to-end log flow, structured JSON logging, and cross-service request correlation in Grafana Loki.
+This directory contains a containerized microservices application designed to demonstrate logging, tracing, metrics flow, and request correlation in the Kubernetes monitoring stack.
 
-## Architecture & Log Correlation Flow
+## Architecture & Request Flows
 
+The microservices stack consists of 5 services written in different programming languages:
+
+```mermaid
+graph TD
+    UI["Browser (React Dashboard)"] -->|http://test.prakriti.website/| GW[Shared GKE Gateway]
+    GW -->|/| SE["service-e (React/Vite)"]
+    
+    %% HTTP Flow
+    GW -->|/api/service-a/api/hello| SA["service-a (Go)"]
+    SA -->|HTTP GET/POST /process| SB["service-b (Go Core)"]
+    
+    %% gRPC Flows
+    GW -->|/api/service-c/call-grpc| SC["service-c (TypeScript)"]
+    SC -->|gRPC CallServiceA| SA
+    
+    GW -->|/api/service-d/call-grpc| SD["service-d (Python)"]
+    SD -->|gRPC CallServiceA| SA
 ```
-   [ Client Request ]
-           │
-           ▼
-┌──────────────────────┐ (Port 8080)
-│      service-a       │ ──► Generates or propagates X-Correlation-Id
-└──────────────────────┘ ──► Logs incoming request (JSON format)
-           │
-           ▼ (HTTP GET /process with X-Correlation-Id)
-┌──────────────────────┐ (Port 8081)
-│      service-b       │ ──► Extracts X-Correlation-Id
-└──────────────────────┘ ──► Performs work & logs execution status (INFO/WARN/ERROR)
-           │
-           ▼ (JSON response)
-┌──────────────────────┐
-│      service-a       │ ──► Logs downstream response details & returns result
-└──────────────────────┘
-```
 
-By passing a unified `correlation_id` in the JSON logs of both services, you can trace a single request's complete lifecycle across service boundaries using Grafana Loki.
+### Supported Flow Pipelines:
+1. **HTTP Pipeline (`Service A ➔ Service B`)**: 
+   A client calls Service A's HTTP endpoint. Service A automatically generates/propagates a `correlation_id` in headers and forwards the HTTP request to Service B.
+2. **TypeScript gRPC Link (`Service C ➔ Service A ➔ Service B`)**:
+   A client calls Service C's Express endpoints. Service C translates this into a gRPC request (`CallServiceA`) to Service A, which in turn calls Service B via gRPC (`CallServiceB`).
+3. **Python gRPC Link (`Service D ➔ Service A ➔ Service B`)**:
+   A client calls Service D's Flask endpoints. Service D translates this into a gRPC request (`CallServiceA`) to Service A, which calls Service B via gRPC.
+
+All services are fully instrumented with **OpenTelemetry** and stream metrics/logs over OTLP to the OpenTelemetry Collector.
 
 ---
 
-## 1. Local Testing (Without Kubernetes/Docker)
+## Ingress Routing & GKE Gateway Setup
 
-You can run these applications locally to verify logging formats and standard behaviour.
+External ingress is configured via GKE's Gateway Controller using path-prefix routing and the native `URLRewrite` filter:
+* **Domain Name**: `test.prakriti.website` (managed via `loki-test-tls-secret`).
+* **Path Mappings**:
+  * `/` ➔ `service-e` (React dashboard)
+  * `/api/service-a/*` ➔ Strips `/api/service-a` ➔ `service-a` (Port 8080)
+  * `/api/service-b/*` ➔ Strips `/api/service-b` ➔ `service-b` (Port 8081)
+  * `/api/service-c/*` ➔ Strips `/api/service-c` ➔ `service-c` (Port 8082)
+  * `/api/service-d/*` ➔ Strips `/api/service-d` ➔ `service-d` (Port 8083)
 
-### Run Service B
+This routing setup eliminates CORS issues, permitting the React SPA running in the client's browser to make seamless Ajax calls to `${window.location.origin}/api/service-*`.
+
+---
+
+## 1. Local Testing & Development Commands
+
+### Run Services Locally
+
+You can run these applications locally to verify logging formats and standard behavior.
+
+#### Run Service B (Go Core)
 ```bash
-cd service-b
-$env:OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4318"  # Set to stream logs to OTel collector over OTLP/HTTP
-# Or on Unix:
-# export OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4318"
+cd test/service-b
+$env:OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4318"
 go run main.go
 ```
-*Starts on port `8081` by default.*
+*Starts on port `8081`.*
 
-### Run Service A
+#### Run Service A (Go Gateway)
 ```bash
-cd service-a
-# Configure Service A to point to Service B and optionally the local OTel Collector
+cd test/service-a
 $env:SERVICE_B_URL="http://localhost:8081/process"
-$env:OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4318"  # Set to stream logs to OTel collector over OTLP/HTTP
-# Or on Unix:
-# export SERVICE_B_URL="http://localhost:8081/process"
-# export OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4318"
+$env:SERVICE_B_GRPC_URL="localhost:50052"
+$env:OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4318"
 go run main.go
 ```
-*Starts on port `8080` by default.*
+*Starts on port `8080` (HTTP) and `50051` (gRPC).*
 
-### Send a Test Request
-Open a new terminal and send an HTTP request:
+#### Run Service C (Node / TypeScript)
 ```bash
-curl http://localhost:8080/api/hello
+cd test/service-c
+npm install
+$env:SERVICE_A_GRPC_URL="localhost:50051"
+$env:OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4318"
+npm start
 ```
+*Starts on port `8082`.*
 
-**Expected JSON Response:**
-```json
-{
-  "correlation_id": "8c414995f5195cc4b5b487c603b55c39",
-  "duration_ms": 152,
-  "message": "Hello from Service A!",
-  "service_b_response": {
-    "correlation_id": "8c414995f5195cc4b5b487c603b55c39",
-    "latency_ms": 150,
-    "processed_by": "service-b",
-    "status": "success"
-  },
-  "service_b_status": 200
-}
+#### Run Service D (Python / Flask)
+```bash
+cd test/service-d
+pip install -r requirements.txt
+$env:SERVICE_A_GRPC_URL="localhost:50051"
+$env:OTEL_EXPORTER_OTLP_ENDPOINT="localhost:4318"
+python main.py
 ```
+*Starts on port `8083`.*
 
-**Stdout Log Samples (JSON Format):**
-```json
-{"time":"2026-07-17T16:50:00.000Z","level":"INFO","msg":"received request to /api/hello","correlation_id":"8c414995f5195cc4b5b487c603b55c39","method":"GET","path":"/api/hello","client_ip":"127.0.0.1:51234","user_agent":"curl/7.81.0"}
-{"time":"2026-07-17T16:50:00.000Z","level":"INFO","msg":"Service B processing request started","correlation_id":"8c414995f5195cc4b5b487c603b55c39","method":"GET","path":"/process"}
-{"time":"2026-07-17T16:50:00.150Z","level":"INFO","msg":"Service B processing request completed","correlation_id":"8c414995f5195cc4b5b487c603b55c39","status":"success","latency_ms":150}
-{"time":"2026-07-17T16:50:00.152Z","level":"INFO","msg":"received response from Service B","correlation_id":"8c414995f5195cc4b5b487c603b55c39","status_code":200,"duration_ms":152}
+#### Run Service E (React Dashboard Frontend)
+```bash
+cd test/service-e
+npm install
+npm run dev
 ```
+*Starts on port `5173`.*
 
 ---
 
 ## 2. Deploying to Kubernetes
 
-### Create Google Artifact Registry (GAR) Repositories
+All test applications are deployed under the `test` namespace.
 
-Create two dedicated Docker repositories in Google Artifact Registry (one for each service):
-
+### Build & Deploy Commands
+Apply the test suite manifests (which compile the local Helm charts for all 5 services):
 ```bash
-gcloud artifacts repositories create service-a --repository-format=docker --location=us-central1 --description="Docker repository for service-a logs testing app"
-gcloud artifacts repositories create service-b --repository-format=docker --location=us-central1 --description="Docker repository for service-b logs testing app"
+# Apply kustomization (compile helm chart and shared gateway definitions)
+kubectl kustomize test/kustomize | kubectl apply --server-side --force-conflicts -f -
 ```
 
-### Build and Push to Google Artifact Registry (GAR)
-
-Configure docker authentication with the registry location:
+### Rollout Update after Rebuild
+If you push changes to `test/`, a GitHub Actions workflow (`.github/workflows/loki-test-apps.yaml`) automatically builds and pushes the updated Docker images via Workload Identity Federation (WIF). 
+Once the build completes, restart the pods to pull the new code:
 ```bash
-gcloud auth configure-docker us-central1-docker.pkg.dev
-```
-
-Define configuration variables:
-```bash
-# PowerShell
-$LOCATION="us-central1"
-$PROJECT="k8s-staging-252732"
-
-# Bash
-LOCATION="us-central1"
-PROJECT="k8s-staging-252732"
-```
-
-Build, tag, and push the docker images to their respective repositories:
-```bash
-# Service A
-docker build -t ${LOCATION}-docker.pkg.dev/${PROJECT}/service-a/service-a:latest ./service-a
-docker push ${LOCATION}-docker.pkg.dev/${PROJECT}/service-a/service-a:latest
-
-# Service B
-docker build -t ${LOCATION}-docker.pkg.dev/${PROJECT}/service-b/service-b:latest ./service-b
-docker push ${LOCATION}-docker.pkg.dev/${PROJECT}/service-b/service-b:latest
-```
-
-### Automating Build & Push with GitHub Actions
-
-A GitHub Actions workflow is configured in [.github/workflows/loki-test-apps.yaml](file:///R:/Devops%20territory/monitoring-ops-stack/.github/workflows/loki-test-apps.yaml) to automate builds on changes to the test apps.
-
-Since service account key creation is restricted in this project by the organization policy constraint `constraints/iam.disableServiceAccountKeyCreation`, authentication is configured via **Workload Identity Federation (WIF)**.
-
-To configure and run the workflow:
-
-1. **Set up Workload Identity Federation**:
-   Run the following commands to create the service account, configure the Workload Identity Pool and Provider, and authorize your GitHub Actions workflow:
-   ```bash
-   # 1. Create the service account and assign Artifact Registry permissions
-   gcloud iam service-accounts create loki-test-pusher --display-name="Loki Test Apps Pusher"
-   gcloud projects add-iam-policy-binding k8s-staging-252732 --member="serviceAccount:loki-test-pusher@k8s-staging-252732.iam.gserviceaccount.com" --role="roles/artifactregistry.writer"
-
-   # 2. Create the Workload Identity Pool
-   gcloud iam workload-identity-pools create loki-test-pool --location="global" --display-name="Loki Test Pool"
-
-   # 3. Create the OIDC Workload Identity Provider for GitHub Actions (restricting to your repository)
-   gcloud iam workload-identity-pools providers create-oidc github-provider \
-       --workload-identity-pool="loki-test-pool" \
-       --location="global" \
-       --issuer-uri="https://token.actions.githubusercontent.com" \
-       --attribute-mapping="google.subject=assertion.subject,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
-       --attribute-condition="assertion.repository == 'prakrit55/monitoring-ops-stack'" \
-       --display-name="GitHub Provider"
-
-   # 4. Get the project number automatically (which resolves to 898698082979)
-   PROJECT_NUMBER=$(gcloud projects describe k8s-staging-252732 --format="value(projectNumber)")
-
-   # 5. Authorize the GitHub repository to impersonate the service account
-   gcloud iam service-accounts add-iam-policy-binding loki-test-pusher@k8s-staging-252732.iam.gserviceaccount.com \
-       --role="roles/iam.workloadIdentityUser" \
-       --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/loki-test-pool/attribute.repository/prakrit55/monitoring-ops-stack"
-   ```
-
-2. **Workflow Pre-configuration**:
-   - The workflow file [.github/workflows/loki-test-apps.yaml](file:///R:/Devops%20territory/monitoring-ops-stack/.github/workflows/loki-test-apps.yaml) is pre-configured with the target Workload Identity Provider (`projects/898698082979/...`) and Service Account email (`loki-test-pusher@k8s-staging-252732...`).
-   - No GitHub secrets need to be added.
-
-3. **Triggering**:
-   - The workflow automatically runs when files inside `logging/loki/test/` are pushed to the repository.
-   - You can also manually trigger it via the **Actions** tab using the `workflow_dispatch` button.
-
-### Apply Manifests
-
-Deploy the applications to your GKE or Kubernetes cluster under the `monitoring` namespace using Kustomize (which dynamically compiles the local Helm charts for each service):
-
-```bash
-# Make sure you are in the test/ directory
-kubectl apply -k . --enable-helm
-```
-
-Verify the pods are running:
-```bash
-kubectl get pods -n monitoring -l "app in (service-a, service-b)"
-```
-
-### Access and Generate Logs in K8s
-Port-forward `service-a` to make it accessible locally:
-```bash
-kubectl port-forward svc/service-a 8080:8080 -n monitoring
-```
-
-Now hit the endpoint multiple times to populate logs:
-```bash
-for i in {1..10}; do curl http://localhost:8080/api/hello; echo ""; sleep 1; done
+kubectl rollout restart deployment -n test --all
 ```
 
 ---
 
-## 3. Querying Logs in Grafana / Loki
+## 3. Telemetry Architecture: Logs & Metrics
 
-Open Grafana and navigate to the **Explore** tab, selecting the **Loki** datasource.
+The microservices stack is fully integrated with OpenTelemetry to output structured telemetry data (Logs and Metrics) for real-time observability.
 
-### Query Logs for a Specific Service
-To view logs from Service A:
-```logql
-{container="service-a"}
+### A. Metrics Stack
+Metrics allow you to monitor the health, throughput, and performance of the applications.
+
+* **Metric Definitions**:
+  * **`http_requests_total`** (Counter): Tracks the total count of incoming HTTP requests.
+  * **`http_request_duration_seconds`** (Histogram): Measures request processing latency.
+* **Instrumentation & Flow**:
+  1. Each microservice records metrics using native OpenTelemetry Meter APIs.
+  2. The metrics are pushed over **OTLP/HTTP** (on port `4318` via path `/v1/metrics`) to the centralized **OpenTelemetry Collector**.
+  3. The Collector aggregates these metrics and writes them to the Prometheus server using the **Prometheus Remote Write** protocol (`prometheusremotewrite` exporter targeting port `9090`).
+* **Prometheus Sanitization Rules**:
+  * Prometheus does not support dot-separated label names. During the export process, OpenTelemetry labels (like `http.route` or `http.method`) are converted into underscore-separated formats:
+    * `http.method` ➔ `http_method`
+    * `http.route` ➔ `http_route`
+    * `http.status_code` ➔ `http_status_code`
+
+---
+
+### B. Logs Stack
+Logs provide a granular text-based record of execution events inside the microservices.
+
+* **Structured Logging**:
+  * **Go Services (`service-a`, `service-b`)**: Use Go's built-in `log/slog` structured logger to emit logs in JSON format directly to stdout.
+  * **TypeScript/Python Services (`service-c`, `service-d`)**: Write structured metadata (like method, path, status, and latency) to standard output.
+* **Request Correlation (Tracing Logs)**:
+  * To trace requests spanning multiple microservices, the application uses **Request Correlation**.
+  * When a request enters `service-a`, it extracts or generates a unique `X-Correlation-Id` header (e.g. `8c414995f5195cc4b...`).
+  * As the request moves downstream (via HTTP or gRPC), this ID is passed along in headers.
+  * Every service log entry includes a `"correlation_id"` field. Searching Loki for this single ID yields the exact chronological execution path across all microservices.
+* **Collection Flow**:
+  * The stdout/stderr logs of the containers are collected by the logging daemon (like Promtail or OTel Collector's Loki exporter) and forwarded directly to **Grafana Loki**.
+
+---
+
+### C. Microservice SDK Instrumentations (Code Implementation)
+
+Here are the exact code implementation structures used to bootstrap the OpenTelemetry metrics collection in each microservice:
+
+#### 1. Go SDK (`service-a`, `service-b`)
+We wrap standard HTTP handler functions using custom Go middleware that initializes the `http_requests_total` counter and `http_request_duration_seconds` histogram metrics:
+```go
+func instrumentHandler(meter metric.Meter, next http.HandlerFunc, path string) http.HandlerFunc {
+	requestCounter, _ := meter.Int64Counter("http_requests_total",
+		metric.WithDescription("Total number of HTTP requests received"),
+		metric.WithUnit("1"),
+	)
+	requestDuration, _ := meter.Float64Histogram("http_request_duration_seconds",
+		metric.WithDescription("Duration of HTTP requests in seconds"),
+		metric.WithUnit("s"),
+	)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rw := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
+
+		next(rw, r) // Execute inner handler logic
+
+		duration := time.Since(start).Seconds()
+		attrs := []attribute.KeyValue{
+			attribute.String("http.method", r.Method),
+			attribute.String("http.route", path),
+			attribute.Int("http.status_code", rw.statusCode),
+		}
+
+		requestCounter.Add(r.Context(), 1, metric.WithAttributes(attrs...))
+		requestDuration.Record(r.Context(), duration, metric.WithAttributes(attrs...))
+	}
+}
 ```
 
-To view logs from Service B:
-```logql
-{container="service-b"}
+#### 2. Express / Node.js SDK (`service-c`)
+In Node.js, we configure Express to use custom metrics middleware, intercepting the response's `finish` event to capture execution latency:
+```typescript
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000;
+    const route = req.route ? req.route.path : req.path;
+    if (requestCounter) {
+      requestCounter.add(1, {
+        'http.method': req.method,
+        'http.route': route,
+        'http.status_code': res.statusCode.toString(),
+      });
+    }
+    if (requestDuration) {
+      requestDuration.record(duration, {
+        'http.method': req.method,
+        'http.route': route,
+        'http.status_code': res.statusCode.toString(),
+      });
+    }
+  });
+  next();
+});
 ```
 
-### Parse JSON Logs Automatically
-Loki can parse structured JSON logs using the `json` stage:
-```logql
-{container="service-a"} | json
-```
-Once parsed, fields like `correlation_id`, `duration_ms`, `level`, and `msg` are populated as labels on the fly.
+#### 3. Flask / Python SDK (`service-d`)
+For Python, we utilize Flask's native `@app.before_request` and `@app.after_request` request lifecycle hooks to compute runtime metrics:
+```python
+@app.before_request
+def handle_options_and_timer():
+    request.start_time = time.time()
 
-### Filter by Log Level
-To find only warning or error logs in Service B:
-```logql
-{container="service-b"} | json | level=~"WARN|ERROR"
+@app.after_request
+def record_metrics(response):
+    if request.method != 'OPTIONS' and request_counter and hasattr(request, "start_time"):
+        duration = time.time() - request.start_time
+        route = request.url_rule.rule if request.url_rule else request.path
+        
+        labels = {
+            "http.method": request.method,
+            "http.route": route,
+            "http.status_code": str(response.status_code)
+        }
+        request_counter.add(1, labels)
+        request_duration.record(duration, labels)
+    return response
 ```
 
-### Correlate Requests Across Services
-Copy a `correlation_id` from a Service A log entry and query both services to trace the request cycle:
+---
+
+## 4. Querying Telemetry in Grafana
+
+Open Grafana and go to the **Explore** tab.
+
+### Trace Request Lifecycles in Loki (Logs)
+Grab the **Correlation ID** printed in the React Dashboard's terminal console and run this LogQL query:
 ```logql
 {container=~"service-.*"} | json | correlation_id="<YOUR-CORRELATION-ID-HERE>"
 ```
-This shows the sequence of events starting at Service A, processing in Service B, and finishing back in Service A.
+This lists the chronological trace of logs from all services involved in that request.
+
+### Monitor Traffic in Prometheus (Metrics)
+Find request rates grouped by HTTP method:
+```promql
+sum by (http_method) (rate(http_requests_total[5m]))
+```
+
+View average latencies by route:
+```promql
+sum by (http_route) (rate(http_request_duration_seconds_sum[5m])) 
+/ 
+sum by (http_route) (rate(http_request_duration_seconds_count[5m]))
+```
+
+View the 95th percentile latency per service:
+```promql
+histogram_quantile(0.95, sum by (le, job) (rate(http_request_duration_seconds_bucket[5m])))
+```
+
+View the 95th percentile latency per route:
+```promql
+histogram_quantile(0.95, sum by (le, http_route) (rate(http_request_duration_seconds_bucket[5m])))
+```
+*(Note: OpenTelemetry attributes with dots like `http.method` and `http.route` are sanitized to `http_method` and `http_route` in Prometheus.)*

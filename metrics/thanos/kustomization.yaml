@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../gateway
+  - gateway-components
+
+# Automatically generate the Kubernetes secret from the local yaml file
+secretGenerator:
+  - name: thanos-objstore-secret
+    namespace: monitoring
+    files:
+      - thanos.yaml=thanos-objstore.yaml
+      - objstore.yml=thanos-objstore.yaml
+
+# Pull and configure the Thanos Helm Chart declaratively
+helmCharts:
+  - name: thanos
+    repo: https://charts.bitnami.com/bitnami
+    releaseName: thanos
+    version: 15.7.2
+    valuesFile: thanos-values.yaml
+    namespace: monitoring
+
+patches:
+  - target:
+      group: gateway.networking.k8s.io
+      version: v1
+      kind: Gateway
+      name: default-gateway
+      namespace: gateway-system
+    path: gateway-components/thanos-gateway-patch.yaml

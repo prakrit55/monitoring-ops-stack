@@ -2,13 +2,19 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - gateway
+  # Thanos Stack (deploys default gateway, certificate, route + thanos sidecar / components)
+  - thanos
+  # Community Stack (deploys standard prometheus/grafana ingress gateway config without Thanos)
+  # - community
+
 
 helmCharts:
   - name: kube-prometheus-stack
     repo: https://prometheus-community.github.io/helm-charts
     releaseName: monitoring
     version: 72.6.2
-    valuesFile: helm-values/prometheus-grafana-stack.yaml
+    # Ensure valuesFile aligns with the active resource directory selected above:
+    valuesFile: thanos/prometheus-grafana-stack.yaml
+    # valuesFile: community/prometheus-grafana-stack.yaml
     namespace: monitoring
     includeCRDs: true

@@ -1,0 +1,60 @@
+prometheus:
+  enabled: true
+  prometheusSpec:
+    replicas: 2
+    # Enable remote write receiver for OpenTelemetry metrics (default: false)
+    enableRemoteWriteReceiver: true
+    enableFeatures:
+      - exemplar-storage
+      - native-histograms
+    thanos:
+      version: v0.31.0
+      objectStorageConfig:
+        key: thanos.yaml
+        name: thanos-objstore-secret
+
+  # Configure serviceAccount for Workload Identity
+  serviceAccount:
+    create: true
+    annotations:
+      iam.gke.io/gcp-service-account: "thanos-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com"
+
+grafana:
+  enabled: true
+  service:
+    type: ClusterIP
+  sidecar:
+    datasources:
+      isDefaultDatasource: false
+
+  # Declaratively configure Thanos Query as a datasource in Grafana
+  additionalDataSources:
+    - name: Thanos
+      type: prometheus
+      access: proxy
+      url: http://thanos-query.monitoring.svc.cluster.local:9090
+      isDefault: true
+      jsonData:
+        httpMethod: POST
+        prometheusType: Prometheus
+
+  # Enable anonymous access for demo (default: requires login)
+  grafana.ini:
+    auth.anonymous:
+      enabled: true
+      org_role: Admin
+    auth:
+      disable_login_form: true
+
+# Keep resource footprint light by disabling optional stack components
+alertmanager:
+  enabled: false
+
+nodeExporter:
+  enabled: true
+
+prometheus-node-exporter:
+  enabled: false
+
+kubeStateMetrics:
+  enabled: true
