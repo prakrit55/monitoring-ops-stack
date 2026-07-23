@@ -102,28 +102,75 @@ Prometheus is exposed externally under the GKE Gateway load balancer:
 
 ## Deployment & Verification
 
-### 1. Deploy/Update the Metrics Stack
-To compile the metrics configuration manifests and apply the shared GKE Gateway patches:
+You can deploy either the **Thanos Pipeline** (retains metrics long-term in GCS) or the **Community Pipeline** (standard Prometheus + Grafana stack). 
+
+To toggle between them, you must adjust the `resources` list and the `helmCharts.valuesFile` path inside **[`metrics/kustomization.yaml`](file:///r:/Devops%20territory/monitoring-ops-stack/metrics/kustomization.yaml)**:
+
+---
+
+### Option A: Deploy the Thanos Pipeline (Active Storage & GCS Backup)
+
+This option deploys Prometheus with Thanos sidecars, Thanos Query frontend, and the Store/Compactor components linked to your Google Cloud Storage bucket.
+
+#### Step 1: Configure [`metrics/kustomization.yaml`](file:///r:/Devops%20territory/monitoring-ops-stack/metrics/kustomization.yaml)
+Ensure **`thanos`** is active and `community` is commented out:
+```yaml
+resources:
+  - thanos
+  # - community
+
+helmCharts:
+  - name: kube-prometheus-stack
+    ...
+    valuesFile: thanos/prometheus-grafana-stack.yaml
+    # valuesFile: community/prometheus-grafana-stack.yaml
+```
+
+#### Step 2: Compile and Deploy the Manifests
 ```bash
 kubectl kustomize metrics --enable-helm | kubectl apply --server-side --force-conflicts -f -
 ```
 
-### 2. Deploy/Update the Prometheus Health Check Policy
-To apply the custom health check policy directly:
+#### Step 3: Verify the Thanos Query & Ingress Gateway
 ```bash
-kubectl apply -f metrics/gateway/prometheus-healthcheck.yaml
+# Verify the Thanos HTTPRoute and ingress bindings
+kubectl describe httproute thanos-route -n monitoring
+
+# Check the Thanos Query service is running
+kubectl get svc -n monitoring -l "app.kubernetes.io/name=thanos"
 ```
 
-### 3. Verify Ingress & Routing Status
-Verify that the `default-gateway` has successfully reconciled and bound the HTTPRoute:
-```bash
-kubectl describe gateway default-gateway -n gateway-system
+---
+
+### Option B: Deploy the Community Pipeline (No Thanos / Light Metrics)
+
+This option deploys a standard, isolated Prometheus Operator and Grafana instance with local persistence (no Thanos query layer, no sidecars, and no external GCS bucket requirements).
+
+#### Step 1: Configure [`metrics/kustomization.yaml`](file:///r:/Devops%20territory/monitoring-ops-stack/metrics/kustomization.yaml)
+Ensure **`community`** is active and `thanos` is commented out:
+```yaml
+resources:
+  # - thanos
+  - community
+
+helmCharts:
+  - name: kube-prometheus-stack
+    ...
+    valuesFile: community/prometheus-grafana-stack.yaml
+    # valuesFile: thanos/prometheus-grafana-stack.yaml
 ```
 
-Verify that the Prometheus route matches and routes traffic successfully:
+#### Step 2: Compile and Deploy the Manifests
 ```bash
+kubectl kustomize metrics --enable-helm | kubectl apply --server-side --force-conflicts -f -
+```
+
+#### Step 3: Verify the Prometheus Ingress Gateway
+```bash
+# Verify the standard Prometheus route matches and terminates TLS
 kubectl describe httproute prometheus-route -n monitoring
 ```
+
 
 ---
 
