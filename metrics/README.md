@@ -28,27 +28,42 @@ graph TD
 To decouple environmental properties and avoid strategic merge conflicts, the metrics deployments are structured as follows:
 
 ```text
-metrics/
-├── kustomization.yaml                 # Parent entrypoint (deploys Helm charts & resources)
-└── gateway/
-    ├── kustomization.yaml             # Sub-kustomization for ingress resources
-    ├── gateway.yaml                   # Shared GKE Gateway definition
-    ├── cluster-issuer.yaml            # cert-manager ClusterIssuer configuration
-    ├── grafana-certificate.yaml       # Certificate template for Grafana (generic)
-    ├── grafana-httproute.yaml         # HTTPRoute template for Grafana (generic)
-    ├── grafana-healthcheck.yaml       # GKE HealthCheckPolicy for Grafana
-    ├── grafana-certificate-patch.yaml # Hostname override patch for Grafana Certificate
-    ├── grafana-route-patch.yaml       # Hostname override patch for Grafana HTTPRoute
-    ├── prometheus-certificate.yaml     # Certificate definition for prometheus.prakriti.website
-    ├── prometheus-httproute.yaml       # HTTPRoute definition for prometheus.prakriti.website
-    ├── prometheus-healthcheck.yaml     # GKE HealthCheckPolicy for Prometheus
-    └── prometheus-gateway-patch.yaml  # JSON 6902 patch that appends TLS certs to the shared Gateway
+repo-root/
+├── gateway/                           # Shared GKE Gateway sub-kustomization
+│   ├── kustomization.yaml             # Base gateway kustomization
+│   ├── gateway.yaml                   # Shared GKE Gateway definition
+│   ├── cluster-issuer.yaml            # cert-manager ClusterIssuer configuration
+│   ├── grafana-certificate.yaml       # Certificate template for Grafana
+│   ├── grafana-httproute.yaml         # HTTPRoute for Grafana
+│   └── grafana-healthcheck.yaml       # GKE HealthCheckPolicy for Grafana
+└── metrics/
+    ├── kustomization.yaml             # Parent entrypoint (deploys Helm charts & resources)
+    ├── community/                     # Prometheus-only metrics config (no Thanos)
+    │   ├── kustomization.yaml
+    │   ├── prometheus-grafana-stack.yaml
+    │   └── gateway-components/
+    │       ├── kustomization.yaml
+    │       ├── prometheus-certificate.yaml
+    │       ├── prometheus-httproute.yaml
+    │       ├── prometheus-healthcheck.yaml
+    │       └── prometheus-gateway-patch.yaml
+    └── thanos/                        # Thanos pipeline config
+        ├── kustomization.yaml
+        ├── prometheus-grafana-stack.yaml
+        ├── thanos-values.yaml
+        ├── thanos-objstore.yaml
+        └── gateway-components/
+            ├── kustomization.yaml
+            ├── thanos-certificate.yaml
+            ├── thanos-httproute.yaml
+            ├── thanos-healthcheck.yaml
+            └── thanos-gateway-patch.yaml
 ```
 
 ### Key Design Decisions:
-1. **Isolated Sub-Kustomizations**: By encapsulating shared ingress resources inside `./gateway/` and running strategic merge patches inside its local `kustomization.yaml`, we can dynamically substitute parameters (like hostnames) before exposing the final resources to the parent `metrics/kustomization.yaml`.
-2. **Coexistence-Safe Gateway Patching**: GKE Custom Resource list fields (like `certificateRefs` under `Gateway`) are treated as replace-by-default lists. To prevent separate pipelines from overwriting one another's certificates, the patch files utilize `op: replace` to set a unified list of certificate references (`grafana-tls-secret`, `loki-test-tls-secret`, and `prometheus-tls-secret`), ensuring all subdomains are kept active.
-3. **Declarative Helm Chart Generation**: Instead of installing or upgrading resources manually via the `helm` CLI, the parent `kustomization.yaml` declares the `kube-prometheus-stack` chart inline via the `helmCharts` field. Running kustomize with the `--enable-helm` flag fetches, templates, and builds the chart using the local values file `helm-values/prometheus-grafana-stack.yaml`. This provides a fully declarative GitOps pipeline for community charts.
+1. **Isolated Sub-Kustomizations**: By encapsulating the shared base GKE Gateway definition inside the root `/gateway` directory and utilizing local `gateway-components` sub-kustomizations to append configuration, we avoid duplication and strategic merge conflicts.
+2. **Coexistence-Safe Gateway Patching**: GKE Custom Resource list fields (like `certificateRefs` under `Gateway`) are treated as replace-by-default lists. To prevent separate pipelines from overwriting one another's certificates, the patch files utilize `op: add` to append individual certificate references (such as `prometheus-tls-secret` or `thanos-tls-secret`), ensuring all subdomains are kept active.
+3. **Declarative Helm Chart Generation**: Instead of installing or upgrading resources manually via the `helm` CLI, the parent `kustomization.yaml` declares the `kube-prometheus-stack` chart inline via the `helmCharts` field. Running kustomize with the `--enable-helm` flag fetches, templates, and builds the chart. This provides a fully declarative GitOps pipeline for community charts.
 
 ---
 
@@ -142,3 +157,12 @@ avg_over_time(http_requests_total{http_route="/"}[2m])
 ```promql
 sum by (service_name) (rate(http_requests_total{http_status_code=~"5.."}[5m]))
 ```
+
+---
+
+## Namespace Pod & Network Resource Utilization
+
+Below is a visualization of the Grafana dashboard showing the pod network utilization and resource consumption inside the `test` namespace, querying through Thanos:
+
+![Namespace Pod & Network Resource Utilization](./screenshot-pod-metrics.png)
+

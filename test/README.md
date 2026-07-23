@@ -109,10 +109,10 @@ npm run dev
 All test applications are deployed under the `test` namespace.
 
 ### Build & Deploy Commands
-Apply the test suite manifests (which compile the local Helm charts for all 5 services):
+
+Deploy the entire test stack (this compiles the local Helm charts for all 5 services, and sets up GKE Gateway routing rules and TLS certificates):
 ```bash
-# Apply kustomization (compile helm chart and shared gateway definitions)
-kubectl kustomize test/kustomize | kubectl apply --server-side --force-conflicts -f -
+kubectl kustomize test/kustomize --enable-helm | kubectl apply --server-side --force-conflicts -f -
 ```
 
 ### Rollout Update after Rebuild

@@ -163,3 +163,12 @@ Check Thanos Query service status:
 ```bash
 kubectl get svc -n monitoring -l "app.kubernetes.io/name=thanos"
 ```
+
+---
+
+## Thanos & Grafana Metrics Dashboard
+
+Below is a visualization of the Grafana dashboard querying metrics through Thanos Query:
+
+![Thanos and Grafana Metrics Dashboard](./screenshot.png)
+

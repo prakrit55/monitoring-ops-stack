@@ -9,13 +9,28 @@ existingObjstoreSecret: thanos-objstore-secret
 # 1. Thanos Query: Global PromQL aggregator and deduplicator
 query:
   enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
   stores:
-    - monitoring-prometheus-operated.monitoring.svc.cluster.local:10901
+    - prometheus-operated.monitoring.svc.cluster.local:10901
     - thanos-storegateway.monitoring.svc.cluster.local:10901
+
+queryFrontend:
+  enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
 
 # 2. Thanos Store Gateway: Serves historical queries from GCS
 storegateway:
   enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
   # Enable Workload Identity for historical queries
   serviceAccount:
     annotations:
@@ -24,6 +39,10 @@ storegateway:
 # 3. Thanos Compact: Compacts and downsamples GCS historical data
 compact:
   enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
   retentionResolutionRaw: 30d
   retentionResolution5m: 90d
   retentionResolution1h: 365d
