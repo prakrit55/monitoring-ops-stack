@@ -33,5 +33,6 @@ scrape_configs:
       - targets: ["fluent-bit:2020"]
 
   - job_name: "mock-metrics"
+    honor_labels: true
     static_configs:
       - targets: ["mock-metrics:8080"]
