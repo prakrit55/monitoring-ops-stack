@@ -8,7 +8,7 @@ providers:
     disableDeletion: false
     editable: true
     options:
-      path: /etc/grafana/provisioning/dashboards/json
+      path: /etc/grafana/dashboards/json
 
   - name: "Observability Tier Dashboards"
     orgId: 1
@@ -17,4 +17,4 @@ providers:
     disableDeletion: false
     editable: true
     options:
-      path: /etc/grafana/provisioning/dashboards/tier-json
+      path: /etc/grafana/dashboards/tier-json

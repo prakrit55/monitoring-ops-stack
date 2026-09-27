@@ -102,8 +102,8 @@ services:
     volumes:
       - ./docker/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./docker/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ../../grafana-dashboards:/etc/grafana/provisioning/dashboards/json:ro
-      - ../../grafana-dashboards/tier-dashboards:/etc/grafana/provisioning/dashboards/tier-json:ro
+      - ../../grafana-dashboards:/etc/grafana/dashboards/json:ro
+      - ../../grafana-dashboards/tier-dashboards:/etc/grafana/dashboards/tier-json:ro
       - grafana_data:/var/lib/grafana
     depends_on:
       - loki
