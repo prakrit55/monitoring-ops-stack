@@ -44,7 +44,7 @@ services:
     container_name: prometheus
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9092}:9090" # Port 9092 mapped to avoid conflict with order-management (9090)
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -144,7 +144,7 @@ services:
       - ../../mock-metrics:/app:ro
     command: ["python", "/app/generator.py"]
     ports:
-      - "8080:8080"
+      - "${MOCK_METRICS_PORT:-8088}:8080" # Port 8088 mapped to avoid conflict with shipping-handling (8080)
     networks:
       - monitoring
 
