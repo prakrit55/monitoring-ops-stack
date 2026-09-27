@@ -1,15 +1,60 @@
-apiVersion: networking.gke.io/v1
-kind: HealthCheckPolicy
+# ==============================================================================
+# Previous GKE HealthCheckPolicy (Commented)
+# ==============================================================================
+# apiVersion: networking.gke.io/v1
+# kind: HealthCheckPolicy
+# metadata:
+#   name: grafana-healthcheck
+#   namespace: monitoring
+# spec:
+#   targetRef:
+#     group: ""
+#     kind: Service
+#     name: monitoring-grafana
+#   default:
+#     config:
+#       type: HTTP
+#       httpHealthCheck:
+#         requestPath: /api/health
+
+# ==============================================================================
+# Previous AWS EKS ALB Health Check (Commented)
+# ==============================================================================
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: monitoring-grafana
+#   namespace: monitoring
+#   annotations:
+#     alb.ingress.kubernetes.io/healthcheck-path: /api/health
+#     alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+#     alb.ingress.kubernetes.io/healthcheck-port: "3000"
+#     alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+#     alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+#     alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+#     alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+
+# ==============================================================================
+# Envoy Gateway BackendTrafficPolicy (Active Health Check for Grafana)
+# ==============================================================================
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
 metadata:
   name: grafana-healthcheck
   namespace: monitoring
 spec:
-  targetRef:
-    group: ""
-    kind: Service
-    name: monitoring-grafana
-  default:
-    config:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: grafana-route
+  healthCheck:
+    active:
       type: HTTP
-      httpHealthCheck:
-        requestPath: /api/health
+      http:
+        path: /api/health
+        expectedStatuses:
+        - 200
+      interval: 15s
+      timeout: 5s
+      unhealthyThreshold: 2
+      healthyThreshold: 2

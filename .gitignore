@@ -20,3 +20,7 @@ test/service-d/proto
 .terraform/
 *.tfstate
 *.tfstate.backup
+
+# Helm & Kustomize inflated charts
+charts/
+*.tgz

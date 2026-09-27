@@ -1,0 +1,237 @@
+groups:
+  # ---------------------------------------------------------------------------
+  # Tier 1 & Tier 2: RED (Rate, Errors, Duration) & SLO Rules
+  # ---------------------------------------------------------------------------
+  - name: tier1_tier2_service_red_slo_rules
+    interval: 30s
+    rules:
+      - record: job:http_requests:rate5m
+        expr: sum by (job, service, status, namespace) (rate(http_requests_total[5m]))
+      - record: job:http_requests:error_ratio5m
+        expr: >-
+          sum by (job, service, namespace) (rate(http_requests_total{status=~"5.*|5.."}[5m]))
+          /
+          sum by (job, service, namespace) (rate(http_requests_total[5m]))
+      - record: job:http_request_duration_seconds:p50
+        expr: histogram_quantile(0.50, sum by (job, service, namespace, le) (rate(http_request_duration_seconds_bucket[5m])))
+      - record: job:http_request_duration_seconds:p90
+        expr: histogram_quantile(0.90, sum by (job, service, namespace, le) (rate(http_request_duration_seconds_bucket[5m])))
+      - record: job:http_request_duration_seconds:p99
+        expr: histogram_quantile(0.99, sum by (job, service, namespace, le) (rate(http_request_duration_seconds_bucket[5m])))
+      - record: job:sli_availability:ratio30d
+        expr: >-
+          1 - (
+            sum by (job, service, namespace) (rate(http_requests_total{status=~"5.*|5.."}[30d]))
+            /
+            sum by (job, service, namespace) (rate(http_requests_total[30d]))
+          )
+      - record: job:error_budget_burn_rate:1h
+        expr: >-
+          (
+            sum by (job, service, namespace) (rate(http_requests_total{status=~"5.*|5.."}[1h]))
+            /
+            sum by (job, service, namespace) (rate(http_requests_total[1h]))
+          ) / (1 - 0.999)
+
+  # ---------------------------------------------------------------------------
+  # Tier 3: USE (Utilization, Saturation, Errors) Infrastructure Rules
+  # ---------------------------------------------------------------------------
+  - name: tier3_infra_use_rules
+    interval: 30s
+    rules:
+      - record: node:cpu_utilization:ratio5m
+        expr: 1 - avg by (node, instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))
+      - record: node:cpu_saturation:load_per_cpu
+        expr: >-
+          node_load1
+          /
+          count by (node, instance) (node_cpu_seconds_total{mode="idle"})
+      - record: node:memory_utilization:ratio
+        expr: >-
+          1 - (
+            (node_memory_MemAvailable_bytes or (node_memory_MemFree_bytes + node_memory_Buffers_bytes + node_memory_Cached_bytes))
+            /
+            node_memory_MemTotal_bytes
+          )
+      - record: node:disk_io_time:rate5m
+        expr: >-
+          rate(node_disk_io_time_seconds_total{device!~"loop.*|ram.*"}[5m])
+          or
+          (rate(node_disk_io_time_ms_total{device!~"loop.*|ram.*"}[5m]) / 1000)
+
+  # ---------------------------------------------------------------------------
+  # Tier 1: Platform & Executive SLO Alerts
+  # ---------------------------------------------------------------------------
+  - name: tier1_platform_slo_alerts
+    rules:
+      - alert: ErrorBudgetBurnRateCritical
+        expr: >
+          (job:error_budget_burn_rate:1h > 14.4)
+        for: 2m
+        labels:
+          severity: critical
+          tier: tier1
+          category: slo
+        annotations:
+          summary: "Critical Error Budget Burn Rate on {{ $labels.service }}"
+          description: "Service {{ $labels.service }} in namespace {{ $labels.namespace }} is burning error budget at >14.4x rate (1h)."
+          runbook_url: "https://runbooks.ops.internal/slo-burn-rate"
+          dashboard_url: "/d/tier1-executive?var-service={{ $labels.service }}"
+
+      - alert: ErrorBudgetBurnRateWarning
+        expr: >
+          (job:error_budget_burn_rate:1h > 3)
+        for: 15m
+        labels:
+          severity: warning
+          tier: tier1
+          category: slo
+        annotations:
+          summary: "Elevated Error Budget Burn Rate on {{ $labels.service }}"
+          description: "Service {{ $labels.service }} in namespace {{ $labels.namespace }} is burning error budget at >3x rate over 1h window."
+          runbook_url: "https://runbooks.ops.internal/slo-burn-rate"
+          dashboard_url: "/d/tier1-executive?var-service={{ $labels.service }}"
+
+      - alert: PlatformTrafficDropAnomaly
+        expr: >
+          sum(rate(http_requests_total[5m]))
+          <
+          (sum(rate(http_requests_total[5m] offset 1w)) * 0.5)
+          and
+          sum(rate(http_requests_total[5m] offset 1w)) > 10
+        for: 5m
+        labels:
+          severity: critical
+          tier: tier1
+          category: platform
+        annotations:
+          summary: "Global Platform Traffic Dropped by >50%"
+          description: "Aggregate request traffic has dropped by >50% compared to last week."
+          runbook_url: "https://runbooks.ops.internal/platform-traffic-drop"
+          dashboard_url: "/d/tier1-executive"
+
+  # ---------------------------------------------------------------------------
+  # Tier 2: RED Microservice Alerts
+  # ---------------------------------------------------------------------------
+  - name: tier2_service_red_alerts
+    rules:
+      - alert: ServiceHigh5xxErrorRateCritical
+        expr: >
+          (job:http_requests:error_ratio5m > 0.05)
+          and
+          (sum by (job, service, namespace) (job:http_requests:rate5m) > 5)
+        for: 3m
+        labels:
+          severity: critical
+          tier: tier2
+          category: service
+        annotations:
+          summary: "High 5xx Error Rate (>5%) on service {{ $labels.service }}"
+          description: "Service {{ $labels.service }} error rate is {{ $value | humanizePercentage }}."
+          runbook_url: "https://runbooks.ops.internal/service-5xx-errors"
+          dashboard_url: "/d/tier2-red-service?var-namespace={{ $labels.namespace }}&var-service={{ $labels.service }}"
+
+      - alert: ServiceHigh5xxErrorRateWarning
+        expr: >
+          (job:http_requests:error_ratio5m > 0.01)
+          and
+          (sum by (job, service, namespace) (job:http_requests:rate5m) > 5)
+        for: 5m
+        labels:
+          severity: warning
+          tier: tier2
+          category: service
+        annotations:
+          summary: "Elevated 5xx Error Rate (>1%) on service {{ $labels.service }}"
+          description: "Service {{ $labels.service }} error rate is {{ $value | humanizePercentage }}."
+          runbook_url: "https://runbooks.ops.internal/service-5xx-errors"
+          dashboard_url: "/d/tier2-red-service?var-namespace={{ $labels.namespace }}&var-service={{ $labels.service }}"
+
+      - alert: ServiceHighP99LatencyCritical
+        expr: >
+          (job:http_request_duration_seconds:p99 > 1.0)
+          and
+          (sum by (job, service, namespace) (job:http_requests:rate5m) > 2)
+        for: 5m
+        labels:
+          severity: critical
+          tier: tier2
+          category: latency
+        annotations:
+          summary: "P99 Latency Degradation (>1s) on {{ $labels.service }}"
+          description: "Service {{ $labels.service }} P99 response latency is {{ $value | humanizeDuration }}."
+          runbook_url: "https://runbooks.ops.internal/service-latency"
+          dashboard_url: "/d/tier2-red-service?var-namespace={{ $labels.namespace }}&var-service={{ $labels.service }}"
+
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total[5m]) * 60 > 2
+        for: 5m
+        labels:
+          severity: critical
+          tier: tier2
+          category: availability
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash looping"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted frequently."
+          runbook_url: "https://runbooks.ops.internal/k8s-pod-crashloop"
+          dashboard_url: "/d/tier2-red-service?var-namespace={{ $labels.namespace }}"
+
+  # ---------------------------------------------------------------------------
+  # Tier 3: USE Infrastructure Alerts
+  # ---------------------------------------------------------------------------
+  - name: tier3_infra_use_alerts
+    rules:
+      - alert: NodeCpuUtilizationHigh
+        expr: node:cpu_utilization:ratio5m > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          tier: tier3
+          category: host
+        annotations:
+          summary: "Host CPU utilization >85% on {{ $labels.node }}"
+          description: "Node {{ $labels.node }} CPU utilization has been {{ $value | humanizePercentage }}."
+          runbook_url: "https://runbooks.ops.internal/host-cpu-saturation"
+          dashboard_url: "/d/tier3-use-infra?var-node={{ $labels.node }}"
+
+      - alert: NodeMemoryUtilizationHigh
+        expr: node:memory_utilization:ratio > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          tier: tier3
+          category: host
+        annotations:
+          summary: "Host Memory utilization >90% on {{ $labels.node }}"
+          description: "Node {{ $labels.node }} memory utilization is {{ $value | humanizePercentage }}."
+          runbook_url: "https://runbooks.ops.internal/host-memory-exhaustion"
+          dashboard_url: "/d/tier3-use-infra?var-node={{ $labels.node }}"
+
+      - alert: DiskSpaceWillFillIn8Hours
+        expr: >
+          (predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs", mountpoint="/"}[1h], 8 * 3600) < 0)
+          and
+          (node:disk_space_utilization:ratio > 0.75)
+        for: 15m
+        labels:
+          severity: critical
+          tier: tier3
+          category: storage
+        annotations:
+          summary: "Disk space running out in <8 hours on {{ $labels.instance }}"
+          description: "Mountpoint '/' on node {{ $labels.instance }} is predicted to run out of disk space within 8 hours."
+          runbook_url: "https://runbooks.ops.internal/disk-exhaustion"
+          dashboard_url: "/d/tier3-use-infra?var-node={{ $labels.node }}"
+
+      - alert: HighContainerCpuThrottling
+        expr: container:cpu_throttling:ratio_rate5m > 0.30
+        for: 10m
+        labels:
+          severity: warning
+          tier: tier3
+          category: saturation
+        annotations:
+          summary: "High CPU throttling (>30%) on container {{ $labels.container }}"
+          description: "Container {{ $labels.container }} in pod {{ $labels.pod }} is being CPU throttled."
+          runbook_url: "https://runbooks.ops.internal/cpu-throttling"
+          dashboard_url: "/d/tier3-use-infra"

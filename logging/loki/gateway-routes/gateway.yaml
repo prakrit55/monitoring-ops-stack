@@ -3,31 +3,96 @@ kind: Namespace
 metadata:
   name: gateway-system
 ---
+# ==============================================================================
+# Previous GKE Gateway Configuration (Commented)
+# ==============================================================================
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: Gateway
+# metadata:
+#   name: default-gateway
+#   namespace: gateway-system
+# spec:
+#   gatewayClassName: gke-l7-global-external-managed
+#   listeners:
+#   - name: http-rancher
+#     protocol: HTTP
+#     port: 80
+#     allowedRoutes:
+#       namespaces:
+#         from: All
+#   - name: https-rancher
+#     protocol: HTTPS
+#     port: 443
+#     tls:
+#       mode: Terminate
+#       certificateRefs:
+#       - name: rancher-tls-secret
+#         kind: Secret
+#       - name: grafana-tls-secret
+#         kind: Secret
+#       - name: loki-test-tls-secret
+#         kind: Secret
+#     allowedRoutes:
+#       namespaces:
+#         from: All
+
+# ==============================================================================
+# AWS EKS ALB Gateway Configuration (Commented)
+# ==============================================================================
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: Gateway
+# metadata:
+#   name: default-gateway
+#   namespace: gateway-system
+#   annotations:
+#     alb.ingress.kubernetes.io/scheme: internet-facing
+#     alb.ingress.kubernetes.io/target-type: ip
+#     alb.ingress.kubernetes.io/load-balancer-name: default-gateway
+# spec:
+#   gatewayClassName: alb
+#   listeners:
+#   - name: http
+#     protocol: HTTP
+#     port: 80
+#     allowedRoutes:
+#       namespaces:
+#         from: All
+#   - name: https
+#     protocol: HTTPS
+#     port: 443
+#     tls:
+#       mode: Terminate
+#       certificateRefs:
+#       - name: grafana-tls-secret
+#         kind: Secret
+#     allowedRoutes:
+#       namespaces:
+#         from: All
+
+# ==============================================================================
+# Envoy Gateway Configuration (mumbai-gateway-class)
+# ==============================================================================
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: default-gateway
   namespace: gateway-system
 spec:
-  gatewayClassName: gke-l7-global-external-managed
+  gatewayClassName: mumbai-gateway-class
   listeners:
-  - name: http-rancher
+  - name: http
     protocol: HTTP
     port: 80
     allowedRoutes:
       namespaces:
         from: All
-  - name: https-rancher
+  - name: https
     protocol: HTTPS
     port: 443
     tls:
       mode: Terminate
       certificateRefs:
-      - name: rancher-tls-secret
-        kind: Secret
       - name: grafana-tls-secret
-        kind: Secret
-      - name: loki-test-tls-secret
         kind: Secret
     allowedRoutes:
       namespaces:

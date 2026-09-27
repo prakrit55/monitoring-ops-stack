@@ -1,0 +1,35 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: app-rules
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+  - name: app-alerts
+    rules:
+    - alert: HighHttpErrorRate
+      expr: sum by (job, http_route) (rate(http_requests_total{http_status_code=~"5.."}[5m])) / sum by (job, http_route) (rate(http_requests_total[5m])) * 100 > 5
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "High HTTP error rate detected"
+        description: "HTTP error rate is above 5% (current value: {{ $value }}%) for route {{ $labels.http_route }} on job {{ $labels.job }}."
+    - alert: HighRequestLatency
+      expr: histogram_quantile(0.95, sum by (le, job) (rate(http_request_duration_seconds_bucket[5m]))) > 2
+      for: 3m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High request latency detected"
+        description: "95th percentile of request duration is above 2s (current value: {{ $value }}s) for job {{ $labels.job }}."
+    - alert: TestServiceDown
+      expr: up{namespace="test"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Target down in test namespace"
+        description: "A service pod in the test namespace is down: {{ $labels.instance }}."

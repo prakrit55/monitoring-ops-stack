@@ -1,0 +1,272 @@
+# ==============================================================================
+# Production Helm values for prometheus-community/kube-prometheus-stack
+# Tailored for AWS EKS (Elastic Kubernetes Service) with EBS gp3 & IRSA support
+# ==============================================================================
+
+# Global configuration
+global:
+  rbac:
+    create: true
+  imageRegistry: ""
+
+# ------------------------------------------------------------------------------
+# 1. Prometheus Operator Configuration
+# ------------------------------------------------------------------------------
+prometheusOperator:
+  enabled: true
+  admissionWebhooks:
+    enabled: true
+    certManager:
+      enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ------------------------------------------------------------------------------
+# 2. Prometheus Server & PrometheusSpec Configuration
+# ------------------------------------------------------------------------------
+prometheus:
+  enabled: true
+  serviceAccount:
+    create: true
+    name: prometheus-k8s
+    annotations:
+      # AWS IRSA (IAM Roles for Service Accounts) for AMP / S3 Thanos access
+      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/prometheus-eks-irsa-role
+
+  prometheusSpec:
+    # Disable Helm-scoped filtering to discover custom PrometheusRules & Monitors across ALL namespaces
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    
+    ruleNamespaceSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    podNamespaceSelector: {}
+
+    # Feature flags and receivers
+    enableRemoteWriteReceiver: true
+    enableFeatures:
+      - exemplar-storage
+      - native-histograms
+
+    # Retention configuration
+    retention: 15d
+    retentionSize: 45GiB
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+
+    # Production resource sizing for EKS
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 8Gi
+
+    # Persistent Storage using AWS EBS gp3 StorageClass
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 50Gi
+
+    # Security Context for EBS volume mounting
+    securityContext:
+      fsGroup: 2000
+      runAsGroup: 2000
+      runAsNonRoot: true
+      runAsUser: 1000
+
+    # Tolerations for system and spot node placement
+    tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - key: eks.amazonaws.com/capacityType
+        value: SPOT
+        operator: Equal
+        effect: NoSchedule
+
+# ------------------------------------------------------------------------------
+# 3. Grafana Configuration
+# ------------------------------------------------------------------------------
+grafana:
+  enabled: true
+  defaultDashboardsEnabled: true
+  adminPassword: "prom-operator"
+
+  serviceAccount:
+    create: true
+    name: grafana
+    annotations:
+      # AWS IRSA annotation for Grafana (e.g., CloudWatch / Athena / Timestream access)
+      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/grafana-eks-irsa-role
+
+  # Persistent Storage using AWS EBS gp3 StorageClass
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    type: pvc
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+    finalizers:
+      - kubernetes.io/pvc-protection
+
+  # Production Grafana INI settings
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s:%(http_port)s/"
+      serve_from_sub_path: false
+    security:
+      allow_embedding: true
+    auth.anonymous:
+      enabled: false
+      org_role: Viewer
+
+  # Declaratively add Loki datasource (referencing logging/loki gateway in cluster)
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki-gateway.logging.svc.cluster.local
+      uid: loki
+      jsonData:
+        maxLines: 1000
+
+  # Automatic Dashboard & Datasource Sidecar
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folderAnnotation: k8s-sidecar-target-directory
+      provider:
+        name: sidecarProvider
+        orgid: 1
+        folder: "Observability"
+        type: file
+        disableDeletion: false
+        allowUiUpdates: true
+        foldersFromFilesStructure: true
+    datasources:
+      enabled: true
+      label: grafana_datasource
+      labelValue: "1"
+      searchNamespace: ALL
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# ------------------------------------------------------------------------------
+# 4. Prometheus Node Exporter (DaemonSet on all EKS Nodes)
+# ------------------------------------------------------------------------------
+nodeExporter:
+  enabled: true
+
+prometheus-node-exporter:
+  enabled: true
+  # Tolerations ensuring node-exporter runs on all tainted system, spot, and Karpenter nodes
+  tolerations:
+    - effect: NoSchedule
+      operator: Exists
+    - effect: NoExecute
+      operator: Exists
+    - key: CriticalAddonsOnly
+      operator: Exists
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: eks.amazonaws.com/capacityType
+      value: SPOT
+      operator: Equal
+      effect: NoSchedule
+    - key: karpenter.sh/unschedulable
+      operator: Exists
+      effect: NoSchedule
+    - key: karpenter.sh/disruption
+      operator: Exists
+      effect: NoSchedule
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# ------------------------------------------------------------------------------
+# 5. Kube-State-Metrics Configuration
+# ------------------------------------------------------------------------------
+kubeStateMetrics:
+  enabled: true
+
+kube-state-metrics:
+  enabled: true
+  # Tolerations for scheduling kube-state-metrics on tainted system or spot node groups
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+    - key: eks.amazonaws.com/capacityType
+      value: SPOT
+      operator: Equal
+      effect: NoSchedule
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ------------------------------------------------------------------------------
+# 6. Alertmanager Configuration
+# ------------------------------------------------------------------------------
+alertmanager:
+  enabled: true
+  serviceAccount:
+    create: true
+    name: alertmanager-k8s
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/alertmanager-eks-irsa-role
+
+  alertmanagerSpec:
+    retention: 120h
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi

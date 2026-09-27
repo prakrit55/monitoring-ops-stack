@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../gateway
+  - gateway-components
+  - app-rules.yaml
+  - alertmanager-secrets-resource.yaml
+
+
+
+helmCharts:
+  - name: kube-prometheus-stack
+    repo: https://prometheus-community.github.io/helm-charts
+    releaseName: monitoring
+    version: 72.6.2
+    # Ensure valuesFile aligns with the active resource directory selected above:
+    valuesFile: prometheus-grafana-stack.yaml
+    namespace: monitoring
+    includeCRDs: true
+
+patches:
+  - target:
+      group: gateway.networking.k8s.io
+      version: v1
+      kind: Gateway
+      name: default-gateway
+      namespace: gateway-system
+    path: gateway-components/prometheus-gateway-patch.yaml
+  - target:
+      group: gateway.networking.k8s.io
+      version: v1
+      kind: Gateway
+      name: default-gateway
+      namespace: gateway-system
+    path: gateway-components/alertmanager-gateway-patch.yaml
+

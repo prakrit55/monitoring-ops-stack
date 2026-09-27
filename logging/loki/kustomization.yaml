@@ -2,23 +2,26 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
+  - namespace.yaml
+  - servicemonitors.yaml
   - gateway-routes/gateway.yaml
-  - gateway-routes/grafana-certificate.yaml
+  # - gateway-routes/grafana-certificate.yaml # Uncomment when cert-manager is installed
   - gateway-routes/grafana-httproute.yaml
   - gateway-routes/grafana-healthcheck.yaml
-  - gateway-routes/loki-test-certificate.yaml
-  - gateway-routes/loki-test-httproute.yaml
+  # - gateway-routes/loki-test-certificate.yaml
+  # - gateway-routes/loki-test-httproute.yaml
 
+# kubectl kustomize "logging/loki" --enable-helm --load-restrictor=LoadRestrictionsNone | kubectl apply --server-side --force-conflicts -f -
 helmCharts:
   - name: loki
     repo: https://grafana.github.io/helm-charts
     releaseName: loki
     valuesFile: helm-values/loki-values.yaml
     namespace: monitoring
-  - name: alloy
-    repo: https://grafana.github.io/helm-charts
-    releaseName: alloy
-    valuesFile: helm-values/alloy-values.yaml
+  - name: fluent-bit
+    repo: https://fluent.github.io/helm-charts
+    releaseName: fluent-bit
+    valuesFile: helm-values/fluent-bit-values.yaml
     namespace: monitoring
   - name: kube-prometheus-stack
     repo: https://prometheus-community.github.io/helm-charts
@@ -27,8 +30,37 @@ helmCharts:
     valuesFile: helm-values/prometheus-grafana-stack.yaml
     namespace: monitoring
     includeCRDs: true
-  - name: opentelemetry-collector
-    repo: https://open-telemetry.github.io/opentelemetry-helm-charts
-    releaseName: opentelemetry-collector
-    valuesFile: helm-values/otel-loki-values.yaml
+
+configMapGenerator:
+  - name: custom-grafana-dashboards
     namespace: monitoring
+    files:
+      - ../../grafana-dashboards/apiserver-request-duration.json
+      - ../../grafana-dashboards/container-probes-health.json
+      - ../../grafana-dashboards/ecom-microservices-observability.json
+      - ../../grafana-dashboards/metrics-server-health.json
+      - ../../grafana-dashboards/node-disk-pressure.json
+      - ../../grafana-dashboards/node-network-traffic.json
+      - ../../grafana-dashboards/node-resource-anomalies.json
+      - ../../grafana-dashboards/pending-pods-scheduling.json
+      - ../../grafana-dashboards/pod-cpu-utilization.json
+      - ../../grafana-dashboards/pod-lifecycle-failures-crashloop.json
+      - ../../grafana-dashboards/pod-memory-utilization.json
+      - ../../grafana-dashboards/pod-scaling-churn-rates.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"
+
+  - name: observability-tier-dashboards
+    namespace: monitoring
+    files:
+      - ../../grafana-dashboards/tier-dashboards/tier1-executive.json
+      - ../../grafana-dashboards/tier-dashboards/tier2-red-service.json
+      - ../../grafana-dashboards/tier-dashboards/tier3-use-infra.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        k8s-sidecar-target-directory: "Observability Tiers"

@@ -1,0 +1,82 @@
+groups:
+  # ---------------------------------------------------------------------------
+  # Tier 1 & Tier 2: RED (Rate, Errors, Duration) & SLO Rules
+  # Evaluation Interval: 30s
+  # ---------------------------------------------------------------------------
+  - name: tier1_tier2_service_red_slo_rules
+    interval: 30s
+    rules:
+      # Rate: Aggregate request rate partitioned by job, service, status, namespace
+      - record: job:http_requests:rate5m
+        expr: sum by (job, service, status, namespace) (rate(http_requests_total[5m]))
+
+      # Errors: Ratio of 5xx HTTP errors to total requests by job, service, namespace
+      - record: job:http_requests:error_ratio5m
+        expr: >-
+          sum by (job, service, namespace) (rate(http_requests_total{status=~"5.*|5.."}[5m]))
+          /
+          sum by (job, service, namespace) (rate(http_requests_total[5m]))
+
+      # Duration: P50 latency histogram quantile
+      - record: job:http_request_duration_seconds:p50
+        expr: histogram_quantile(0.50, sum by (job, service, namespace, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      # Duration: P90 latency histogram quantile
+      - record: job:http_request_duration_seconds:p90
+        expr: histogram_quantile(0.90, sum by (job, service, namespace, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      # Duration: P99 latency histogram quantile
+      - record: job:http_request_duration_seconds:p99
+        expr: histogram_quantile(0.99, sum by (job, service, namespace, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      # SLO Availability: Rolling 30-day success ratio (Target: 99.9%)
+      - record: job:sli_availability:ratio30d
+        expr: >-
+          1 - (
+            sum by (job, service, namespace) (rate(http_requests_total{status=~"5.*|5.."}[30d]))
+            /
+            sum by (job, service, namespace) (rate(http_requests_total[30d]))
+          )
+
+      # SLO Error Budget: 1-hour burn rate for 99.9% target (budget = 0.001)
+      - record: job:error_budget_burn_rate:1h
+        expr: >-
+          (
+            sum by (job, service, namespace) (rate(http_requests_total{status=~"5.*|5.."}[1h]))
+            /
+            sum by (job, service, namespace) (rate(http_requests_total[1h]))
+          ) / (1 - 0.999)
+
+  # ---------------------------------------------------------------------------
+  # Tier 3: USE (Utilization, Saturation, Errors) Infrastructure Rules
+  # Evaluation Interval: 30s
+  # ---------------------------------------------------------------------------
+  - name: tier3_infra_use_rules
+    interval: 30s
+    rules:
+      # CPU Utilization: (1 - idle CPU) ratio (0.0 to 1.0)
+      - record: node:cpu_utilization:ratio5m
+        expr: 1 - avg by (node, instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))
+
+      # CPU Saturation: 1-minute load average divided by active CPU core count
+      - record: node:cpu_saturation:load_per_cpu
+        expr: >-
+          node_load1
+          /
+          count by (node, instance) (node_cpu_seconds_total{mode="idle"})
+
+      # Memory Utilization: Fraction of memory consumed vs total available
+      - record: node:memory_utilization:ratio
+        expr: >-
+          1 - (
+            (node_memory_MemAvailable_bytes or (node_memory_MemFree_bytes + node_memory_Buffers_bytes + node_memory_Cached_bytes))
+            /
+            node_memory_MemTotal_bytes
+          )
+
+      # Disk I/O Saturation/Activity: Rate of I/O time spent on non-loop/non-ram block devices
+      - record: node:disk_io_time:rate5m
+        expr: >-
+          rate(node_disk_io_time_seconds_total{device!~"loop.*|ram.*"}[5m])
+          or
+          (rate(node_disk_io_time_ms_total{device!~"loop.*|ram.*"}[5m]) / 1000)

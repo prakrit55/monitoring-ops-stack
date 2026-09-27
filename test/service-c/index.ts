@@ -20,9 +20,11 @@ if (otelEndpoint) {
   });
 
   const meterProvider = new MeterProvider({
-    resource: new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]: 'service-c',
-    }),
+    resource: Resource.default().merge(
+      new Resource({
+        [SemanticResourceAttributes.SERVICE_NAME]: 'service-c',
+      })
+    ),
     readers: [
       new PeriodicExportingMetricReader({
         exporter: exporter,

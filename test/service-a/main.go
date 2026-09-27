@@ -94,6 +94,7 @@ func initLogger(serviceName string) (func(context.Context) error, slog.Handler) 
 	}
 
 	res, err := resource.New(ctx,
+		resource.WithFromEnv(),
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(serviceName),
 		),
@@ -389,6 +390,7 @@ func initMetrics(ctx context.Context, serviceName, otelEndpoint string) (func(co
 	}
 
 	res, err := resource.New(ctx,
+		resource.WithFromEnv(),
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(serviceName),
 		),

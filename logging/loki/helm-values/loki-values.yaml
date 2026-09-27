@@ -2,6 +2,25 @@
 # For high-volume production logs, you can switch this to SimpleScalable.
 deploymentMode: SingleBinary
 
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: false
+  extraVolumes:
+    - name: data
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: data
+      mountPath: /var/loki
+
+# Explicitly set scalable target replicas to 0 for singleBinary mode
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
 loki:
   auth_enabled: false
 
@@ -9,30 +28,45 @@ loki:
     replication_factor: 1
 
   # Storage configuration mapping to Google Cloud Storage (GCS)
+  # storage:
+  #   type: gcs
+  #   gcs:
+  #     bucket_name: "loki-logs-k8s-staging-252732"
+  #   bucketNames:
+  #     chunks: "loki-logs-k8s-staging-252732"
+  #     ruler: "loki-logs-k8s-staging-252732"
+
+  # Storage configuration mapping to AWS S3
   storage:
-    type: gcs
-    gcs:
-      bucket_name: "loki-logs-k8s-staging-252732"
+    type: s3
     bucketNames:
-      chunks: "loki-logs-k8s-staging-252732"
-      ruler: "loki-logs-k8s-staging-252732"
+      chunks: "loki-logs-271643857832-ap-south-1"
+      ruler: "loki-logs-271643857832-ap-south-1"
+      admin: "loki-logs-271643857832-ap-south-1"
+    s3:
+      region: "ap-south-1"
+      # endpoint: "" # Optional for S3-compatible storage (e.g., MinIO)
+      # s3ForcePathStyle: false
+      # insecure: false
 
   schemaConfig:
     configs:
       - from: "2024-01-01"
         store: tsdb
-        object_store: gcs
+        object_store: s3
         schema: v13
         index:
           prefix: loki_index_
           period: 24h
 
-# Define the service account and GKE Workload Identity annotation
+# Define the service account and IAM annotations (GKE Workload Identity / AWS EKS IRSA)
 serviceAccount:
   create: true
   name: loki-sa
   annotations:
-    iam.gke.io/gcp-service-account: "loki-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com"
+    # iam.gke.io/gcp-service-account: "loki-gcs-sa@k8s-staging-252732.iam.gserviceaccount.com"
+    # EKS IAM Roles for Service Accounts (IRSA)
+    eks.amazonaws.com/role-arn: "arn:aws:iam::271643857832:role/loki-s3-access-role"
 
 # Disable memcached results and chunk caching to fit in resource-constrained clusters
 resultsCache:

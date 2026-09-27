@@ -1,0 +1,15 @@
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: prometheus-healthcheck
+  namespace: monitoring
+spec:
+  default:
+    config:
+      httpHealthCheck:
+        requestPath: /-/healthy
+      type: HTTP
+  targetRef:
+    group: ""
+    kind: Service
+    name: monitoring-kube-prometheus-prometheus

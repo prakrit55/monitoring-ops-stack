@@ -1,0 +1,159 @@
+version: "3.8"
+
+services:
+  # -------------------------------------------------------------------------
+  # 1. Grafana Loki - Log Aggregation Engine (from helm loki)
+  # -------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./docker/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/tmp/loki
+    networks:
+      - monitoring
+
+  # -------------------------------------------------------------------------
+  # 2. Fluent Bit - Log Shipper & Processor (from helm fluent-bit)
+  # -------------------------------------------------------------------------
+  fluent-bit:
+    image: fluent/fluent-bit:3.0.4
+    container_name: fluent-bit
+    restart: unless-stopped
+    ports:
+      - "2020:2020"   # Health check & Prometheus metrics
+      - "24224:24224" # Forward input protocol (Docker log driver)
+    volumes:
+      - ./docker/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    networks:
+      - monitoring
+
+  # -------------------------------------------------------------------------
+  # 3. Prometheus - Metrics Server & Alerting Engine (from kube-prometheus-stack)
+  # -------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-remote-write-receiver"
+      - "--web.enable-lifecycle"
+      - "--enable-feature=exemplar-storage"
+      - "--enable-feature=native-histograms"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - node-exporter
+      - alertmanager
+    networks:
+      - monitoring
+
+  # -------------------------------------------------------------------------
+  # 4. Alertmanager - Alert Routing & Notification Dispatcher
+  # -------------------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    networks:
+      - monitoring
+
+  # -------------------------------------------------------------------------
+  # 5. Grafana - Visualization UI & Dashboards (from kube-prometheus-stack)
+  # -------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=false
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+    volumes:
+      - ./docker/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./docker/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ../../grafana-dashboards:/etc/grafana/provisioning/dashboards/json:ro
+      - ../../grafana-dashboards/tier-dashboards:/etc/grafana/provisioning/dashboards/tier-json:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - loki
+      - prometheus
+      - alertmanager
+    networks:
+      - monitoring
+
+  # -------------------------------------------------------------------------
+  # 6. Node Exporter - System / Host Metrics Exporter
+  # -------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+    networks:
+      - monitoring
+
+  # -------------------------------------------------------------------------
+  # 7. Synthetic Metrics Generator (Microservices RED & Cluster Metrics)
+  # -------------------------------------------------------------------------
+  mock-metrics:
+    image: python:3.11-alpine
+    container_name: mock-metrics
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ../../mock-metrics:/app:ro
+    command: ["python", "/app/generator.py"]
+    ports:
+      - "8080:8080"
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  loki_data:
+  prometheus_data:
+  alertmanager_data:
+  grafana_data:
