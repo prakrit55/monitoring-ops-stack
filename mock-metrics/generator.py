@@ -73,7 +73,6 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
             # Node mock info
             lines.append('node_uname_info{instance="node-exporter:9100", machine="x86_64", nodename="k8s-worker-node-1", sysname="Linux"} 1')
-            lines.append('node_uname_info{instance="mock-metrics:8080", machine="x86_64", nodename="k8s-worker-node-2", sysname="Linux"} 1')
             lines.append('node_vmstat_oom_kill{instance="node-exporter:9100"} 0')
             lines.append(f'node_vmstat_pgscan_kswapd{{instance="node-exporter:9100"}} {int(elapsed * 12)}')
 
