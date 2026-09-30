@@ -25,14 +25,14 @@
     },
     {
       "type": "panel",
-      "id": "timeseries",
-      "name": "Time series",
+      "id": "stat",
+      "name": "Stat",
       "version": ""
     },
     {
       "type": "panel",
-      "id": "table",
-      "name": "Table",
+      "id": "timeseries",
+      "name": "Time series",
       "version": ""
     },
     {
@@ -57,7 +57,7 @@
       }
     ]
   },
-  "description": "Dedicated log stream, throughput velocity, error signatures, and live diagnostic triage for Shipping & Handling.",
+  "description": "Historical all-time log archive, severity distribution, and error search for Shipping & Handling.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -69,9 +69,9 @@
       "includeVars": true,
       "keepTime": true,
       "tags": [
-        "service-drilldown"
+        "historical-archive"
       ],
-      "title": "Service Navigation",
+      "title": "Historical Archives",
       "type": "dashboards"
     },
     {
@@ -147,7 +147,7 @@
       },
       "id": 100,
       "panels": [],
-      "title": "Shipping & Handling \u2014 Log Telemetry & Diagnostic Analytics",
+      "title": "Shipping & Handling \u2014 Historical Archive & Long-Term Ingestion Analysis",
       "type": "row"
     },
     {
@@ -164,20 +164,20 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "Lines / Sec",
+            "axisLabel": "Volume (lines)",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 15,
-            "gradientMode": "opacity",
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
             "hideFrom": {
               "legend": false,
               "tooltip": false,
               "viz": false
             },
             "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -186,7 +186,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -208,32 +208,43 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Errors (lines/s)"
+              "options": "error"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "semi-dark-red",
+                  "fixedColor": "red",
                   "mode": "fixed"
                 }
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 35
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Throughput (lines/s)"
+              "options": "warn"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "semi-dark-blue",
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "info"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
                   "mode": "fixed"
                 }
               }
@@ -251,9 +262,8 @@
       "options": {
         "legend": {
           "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
+            "sum",
+            "max"
           ],
           "displayMode": "table",
           "placement": "bottom",
@@ -271,24 +281,13 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum(rate({job=\"shipping-and-handling\"}[1m]))",
-          "legendFormat": "Throughput (lines/s)",
+          "expr": "sum by (level) (count_over_time({job=\"shipping-and-handling\"} | json [$__interval])) or sum(count_over_time({job=\"shipping-and-handling\"} [$__interval]))",
+          "legendFormat": "{{level}}",
           "queryType": "range",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "${DS_LOKI}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate({job=\"shipping-and-handling\"} |~ \"(?i)error|exception|fail|status=[5]\\\\d\\\\d\" [1m]))",
-          "legendFormat": "Errors (lines/s)",
-          "queryType": "range",
-          "refId": "B"
         }
       ],
-      "title": "Shipping & Handling \u2014 Ingestion Rate & Error Spikes",
+      "title": "Historical Ingestion Volume",
       "type": "timeseries"
     },
     {
@@ -301,13 +300,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -317,33 +309,14 @@
                 "value": null
               },
               {
-                "color": "semi-dark-red",
+                "color": "red",
                 "value": 1
               }
             ]
-          }
+          },
+          "unit": "short"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "1h Count"
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "mode": "gradient",
-                  "type": "color-background"
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 7,
@@ -353,23 +326,20 @@
       },
       "id": 2,
       "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
           ],
-          "show": true
+          "fields": "",
+          "values": false
         },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "1h Count"
-          }
-        ]
+        "textMode": "auto"
       },
+      "pluginVersion": "10.4.2",
       "targets": [
         {
           "datasource": {
@@ -377,14 +347,14 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "topk(10, sum by (error_type) (count_over_time({job=\"shipping-and-handling\"} | json | error_type != \"\" [1h]))) or topk(10, sum by (line) (count_over_time({job=\"shipping-and-handling\"} |~ \"(?i)error|exception|fail\" [1h])))",
-          "legendFormat": "{{error_type}}",
-          "queryType": "instant",
+          "expr": "sum(count_over_time({job=\"shipping-and-handling\"} |~ \"(?i)error|exception|fail|status=[5]\\\\d\\\\d\" [$__range]))",
+          "legendFormat": "Total Errors",
+          "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Shipping & Handling \u2014 Top Repeated Exceptions",
-      "type": "table"
+      "title": "Total Error Count (Selected Period)",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -392,7 +362,7 @@
         "uid": "${DS_LOKI}"
       },
       "gridPos": {
-        "h": 14,
+        "h": 16,
         "w": 24,
         "x": 0,
         "y": 8
@@ -417,20 +387,21 @@
           "editorMode": "code",
           "expr": "{job=\"shipping-and-handling\"} |~ \"(?i)${search:raw}\" |~ \"(?i)${level:regex}\"",
           "legendFormat": "",
+          "maxLines": 5000,
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Shipping & Handling \u2014 Full Live Log Stream",
+      "title": "Shipping & Handling \u2014 Historical Logs",
       "type": "logs"
     }
   ],
-  "refresh": "10s",
+  "refresh": "",
   "schemaVersion": 39,
   "tags": [
     "logs",
     "shipping-handling",
-    "service-drilldown"
+    "historical-archive"
   ],
   "templating": {
     "list": [
@@ -518,7 +489,7 @@
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-30d",
     "to": "now"
   },
   "timepicker": {
@@ -536,7 +507,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "Shipping & Handling \u2014 Logs & Triage",
+  "title": "Shipping & Handling \u2014 Historical Log Archive",
   "uid": "shipping-handling-service-logs",
   "version": 1,
   "weekStart": ""
