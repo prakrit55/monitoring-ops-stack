@@ -32,38 +32,56 @@ scrape_configs:
     static_configs:
       - targets: ["fluent-bit:2020"]
 
-  - job_name: "mock-metrics"
-    honor_labels: true
-    static_configs:
-      - targets: ["mock-metrics:8080"]
-
-  # Real Production Microservices
   - job_name: "ecommerce-ui"
     metrics_path: /metrics
     static_configs:
-      - targets: ["ecommerce-ui:4000"]
+      - targets: ["172.31.3.1:4000"]
+    metric_relabel_configs:
+      - source_labels: [route]
+        target_label: path
+        regex: (.+)
+        replacement: $1
 
   - job_name: "product-catalog"
     metrics_path: /metrics
     static_configs:
-      - targets: ["product-catalog:3001"]
+      - targets: ["172.31.3.1:3001"]
+    metric_relabel_configs:
+      - source_labels: [route]
+        target_label: path
+        regex: (.+)
+        replacement: $1
 
   - job_name: "product-inventory"
     metrics_path: /metrics
     static_configs:
-      - targets: ["product-inventory:3002"]
+      - targets: ["172.31.3.1:3002"]
 
   - job_name: "shipping-and-handling"
     metrics_path: /metrics
     static_configs:
-      - targets: ["shipping-and-handling:8080"]
+      - targets: ["172.31.3.1:8080"]
+    metric_relabel_configs:
+      - source_labels: [route]
+        target_label: path
+        regex: (.+)
+        replacement: $1
 
-  - job_name: "contact-support-team"
+  - job_name: "contact-support"
     metrics_path: /metrics
     static_configs:
-      - targets: ["contact-support-team:8000"]
+      - targets: ["172.31.3.1:8000"]
 
   - job_name: "order-management"
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ["order-management:9090"]
+      - targets: ["172.31.3.1:9090"]
+    metric_relabel_configs:
+      - source_labels: [uri]
+        target_label: path
+        regex: (.+)
+        replacement: $1
+      - source_labels: [status]
+        target_label: status_code
+        regex: (.+)
+        replacement: $1
