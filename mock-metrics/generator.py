@@ -16,7 +16,7 @@ import math
 import random
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-START_TIME = time.time()
+START_TIME = time.time() - 3600  # Start 1 hour ago so counters have mature history
 
 SERVICES_DIRECTORY = [
     {
@@ -178,6 +178,7 @@ SERVICES_DIRECTORY = [
 ]
 
 LE_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+SIZE_BUCKETS = [128, 512, 1024, 4096, 16384, 65536, 262144, 1048576]
 
 class MetricsHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -186,7 +187,8 @@ class MetricsHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
             self.end_headers()
             
-            elapsed = time.time() - START_TIME
+            now = time.time()
+            elapsed = now - START_TIME
             lines = []
             
             lines.append("# HELP http_requests_total Total HTTP requests processed.")
@@ -194,6 +196,12 @@ class MetricsHandler(BaseHTTPRequestHandler):
             
             lines.append("# HELP http_request_duration_seconds HTTP request duration histogram.")
             lines.append("# TYPE http_request_duration_seconds histogram")
+
+            lines.append("# HELP http_response_size_bytes HTTP response size in bytes.")
+            lines.append("# TYPE http_response_size_bytes histogram")
+            
+            lines.append("# HELP http_requests_in_flight Current in-flight requests.")
+            lines.append("# TYPE http_requests_in_flight gauge")
             
             lines.append("# HELP kube_deployment_status_observed_generation Observed deployment generation.")
             lines.append("# TYPE kube_deployment_status_observed_generation gauge")
@@ -221,6 +229,12 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
             lines.append("# HELP node_uname_info Node system architecture information.")
             lines.append("# TYPE node_uname_info gauge")
+
+            lines.append("# HELP service_exceptions_total Total service exceptions.")
+            lines.append("# TYPE service_exceptions_total counter")
+
+            lines.append("# HELP downstream_service_errors_total Total downstream service errors.")
+            lines.append("# TYPE downstream_service_errors_total counter")
 
             # Node mock info
             lines.append('node_uname_info{instance="node-exporter:9100", machine="x86_64", nodename="k8s-worker-node-1", sysname="Linux"} 1')
@@ -256,19 +270,30 @@ class MetricsHandler(BaseHTTPRequestHandler):
                     # In-flight gauge
                     lines.append(f'http_requests_in_flight{{job="{j_name}", service="{j_name}", namespace="{ns}"}} {max(1, int(base_rps * 0.15))}')
 
+                    # Downstream dependency error simulation
+                    if j_name == "ecommerce-ui":
+                        lines.append(f'downstream_service_errors_total{{job="{j_name}", target_service="product-catalog"}} {int(elapsed * 0.05)}')
+                        lines.append(f'downstream_service_errors_total{{job="{j_name}", target_service="order-management"}} {int(elapsed * 0.08)}')
+                        lines.append(f'downstream_service_errors_total{{job="{j_name}", target_service="shipping-and-handling"}} {int(elapsed * 0.02)}')
+
                     # Request counters & histograms per path
                     for method, path in paths:
-                        # Individual variance per endpoint
-                        path_weight = 1.0 + (hash(path) % 5) * 0.2
-                        total_reqs = int(elapsed * (base_rps * path_weight / len(paths))) + 1
+                        path_weight = 1.0 + (abs(hash(path)) % 5) * 0.25
+                        total_reqs = int(elapsed * (base_rps * path_weight / len(paths))) + 100
                         err_reqs = max(0, int(total_reqs * err_ratio))
-                        client_err_reqs = max(0, int(total_reqs * 0.02))
-                        success_reqs = max(0, total_reqs - err_reqs - client_err_reqs)
+                        client_err_reqs = max(0, int(total_reqs * 0.025))
+                        redirect_reqs = max(0, int(total_reqs * 0.015))
+                        success_reqs = max(0, total_reqs - err_reqs - client_err_reqs - redirect_reqs)
 
-                        # Emit path, route, and endpoint for universal compatibility across all PromQL styles
+                        # Status code distributions
                         lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="200", status_code="200", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {success_reqs}')
+                        lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="302", status_code="302", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {redirect_reqs}')
                         lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="404", status_code="404", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {client_err_reqs}')
                         lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="500", status_code="500", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {err_reqs}')
+
+                        # Exceptions
+                        if err_reqs > 0:
+                            lines.append(f'service_exceptions_total{{job="{j_name}", exception_type="InternalServerError", endpoint="{path}"}} {err_reqs}')
 
                         # Latency histogram distribution
                         sum_duration = total_reqs * (svc["p99"] * 0.4)
@@ -279,6 +304,15 @@ class MetricsHandler(BaseHTTPRequestHandler):
                         lines.append(f'http_request_duration_seconds_bucket{{job="{j_name}", service="{j_name}", namespace="{ns}", method="{method}", path="{path}", route="{path}", endpoint="{path}", le="+Inf"}} {total_reqs}')
                         lines.append(f'http_request_duration_seconds_sum{{job="{j_name}", service="{j_name}", namespace="{ns}", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {sum_duration:.4f}')
                         lines.append(f'http_request_duration_seconds_count{{job="{j_name}", service="{j_name}", namespace="{ns}", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {total_reqs}')
+
+                        # Payload size distribution
+                        avg_payload = 2048 * path_weight
+                        lines.append(f'http_response_size_bytes_sum{{job="{j_name}", service="{j_name}", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {int(total_reqs * avg_payload)}')
+                        lines.append(f'http_response_size_bytes_count{{job="{j_name}", service="{j_name}", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {total_reqs}')
+                        for sb in SIZE_BUCKETS:
+                            frac = min(1.0, sb / (avg_payload * 3.0))
+                            lines.append(f'http_response_size_bytes_bucket{{job="{j_name}", service="{j_name}", method="{method}", path="{path}", route="{path}", endpoint="{path}", le="{sb}"}} {int(total_reqs * frac)}')
+                        lines.append(f'http_response_size_bytes_bucket{{job="{j_name}", service="{j_name}", method="{method}", path="{path}", route="{path}", endpoint="{path}", le="+Inf"}} {total_reqs}')
 
             payload = "\n".join(lines) + "\n"
             self.wfile.write(payload.encode("utf-8"))
@@ -291,5 +325,5 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = HTTPServer(("0.0.0.0", 8080), MetricsHandler)
-    print("Synthetic RED & K8s Metrics Generator running with full Service API Directory on port 8080...")
+    print("Synthetic RED & K8s Metrics Generator running on port 8080...")
     server.serve_forever()
