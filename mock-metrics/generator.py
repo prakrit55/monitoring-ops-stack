@@ -283,17 +283,29 @@ class MetricsHandler(BaseHTTPRequestHandler):
                         err_reqs = max(0, int(total_reqs * err_ratio))
                         client_err_reqs = max(0, int(total_reqs * 0.025))
                         redirect_reqs = max(0, int(total_reqs * 0.015))
-                        success_reqs = max(0, total_reqs - err_reqs - client_err_reqs - redirect_reqs)
+                        
+                        # Client aborts & timeouts under heavy load (HTTP 499 client closed request / HTTP 408 request timeout)
+                        heavy_load_factor = max(0.003, 0.015 * (1.0 + math.sin(elapsed / 80.0 + s_idx)))
+                        abort_499_reqs = max(0, int(total_reqs * heavy_load_factor * 0.7))
+                        timeout_408_reqs = max(0, int(total_reqs * heavy_load_factor * 0.3))
+
+                        success_reqs = max(0, total_reqs - err_reqs - client_err_reqs - redirect_reqs - abort_499_reqs - timeout_408_reqs)
 
                         # Status code distributions
                         lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="200", status_code="200", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {success_reqs}')
                         lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="302", status_code="302", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {redirect_reqs}')
                         lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="404", status_code="404", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {client_err_reqs}')
+                        lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="408", status_code="408", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {timeout_408_reqs}')
+                        lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="499", status_code="499", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {abort_499_reqs}')
                         lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="500", status_code="500", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {err_reqs}')
 
                         # Exceptions
                         if err_reqs > 0:
                             lines.append(f'service_exceptions_total{{job="{j_name}", exception_type="InternalServerError", endpoint="{path}"}} {err_reqs}')
+                        if abort_499_reqs > 0:
+                            lines.append(f'service_exceptions_total{{job="{j_name}", exception_type="ClientClosedRequest", endpoint="{path}"}} {abort_499_reqs}')
+                        if timeout_408_reqs > 0:
+                            lines.append(f'service_exceptions_total{{job="{j_name}", exception_type="RequestTimeout", endpoint="{path}"}} {timeout_408_reqs}')
 
                         # Latency histogram distribution
                         sum_duration = total_reqs * (svc["p99"] * 0.4)

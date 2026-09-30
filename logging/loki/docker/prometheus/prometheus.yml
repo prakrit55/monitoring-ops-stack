@@ -37,7 +37,7 @@ scrape_configs:
     scrape_interval: 5s
     honor_labels: true
     static_configs:
-      - targets: ["mock-metrics:8088", "172.31.3.1:8088", "localhost:8088"]
+      - targets: ["mock-metrics:8080", "172.31.3.1:8088", "localhost:8088"]
 
   # Direct Scrapes for Host / Docker Microservices
   - job_name: "ecommerce-ui"
