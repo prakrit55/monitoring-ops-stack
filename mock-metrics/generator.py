@@ -321,9 +321,25 @@ class MetricsHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def log_message(self, format, *args):
-        pass
+        now_str = time.strftime('%Y-%m-%d %H:%M:%S')
+        print(f"[{now_str}] {self.client_address[0]} - {format % args}", flush=True)
 
 if __name__ == "__main__":
+    import sys
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
+
+    total_services = len(SERVICES_DIRECTORY)
+    total_endpoints = sum(len(s["paths"]) for s in SERVICES_DIRECTORY)
+    print("=" * 60, flush=True)
+    print("Synthetic RED & K8s Metrics Generator Started", flush=True)
+    print(f"Listening on: http://0.0.0.0:8080/metrics", flush=True)
+    print(f"Registered Services: {total_services}", flush=True)
+    print(f"Total Service Endpoints: {total_endpoints}", flush=True)
+    print("=" * 60, flush=True)
+    
     server = HTTPServer(("0.0.0.0", 8080), MetricsHandler)
-    print("Synthetic RED & K8s Metrics Generator running on port 8080...")
     server.serve_forever()
