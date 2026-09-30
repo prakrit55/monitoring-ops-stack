@@ -347,8 +347,11 @@
       "title": "Discovered Live Endpoints for $service",
       "transformations": [
         {
-          "id": "merge",
-          "options": {}
+          "id": "joinByField",
+          "options": {
+            "byField": "path",
+            "mode": "outer"
+          }
         },
         {
           "id": "organize",
@@ -357,7 +360,14 @@
               "Time": true,
               "Time 1": true,
               "Time 2": true,
-              "Time 3": true
+              "Time 3": true,
+              "method 1": true,
+              "method 2": true,
+              "path 1": true,
+              "path 2": true,
+              "__name__": true,
+              "__name__ 1": true,
+              "__name__ 2": true
             },
             "indexByName": {
               "path": 0,
