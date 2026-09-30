@@ -57,7 +57,7 @@
       }
     ]
   },
-  "description": "Historical all-time log archive, severity distribution, and error search for Product Catalog.",
+  "description": "Historical log archive, severity distribution, and error search for Product Catalog.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -332,7 +332,7 @@
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
-            "lastNotNull"
+            "sum"
           ],
           "fields": "",
           "values": false
@@ -347,7 +347,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({job=\"product-catalog\"} |~ \"(?i)error|exception|fail|status=[5]\\\\d\\\\d\" [$__range]))",
+          "expr": "sum(count_over_time({job=\"product-catalog\"} |~ \"(?i)error|exception|fail|status=[5]\\\\d\\\\d\" [$__interval]))",
           "legendFormat": "Total Errors",
           "queryType": "range",
           "refId": "A"
@@ -489,7 +489,7 @@
     ]
   },
   "time": {
-    "from": "now-30d",
+    "from": "now-7d",
     "to": "now"
   },
   "timepicker": {
