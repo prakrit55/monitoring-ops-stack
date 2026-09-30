@@ -241,7 +241,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
             lines.append('node_vmstat_oom_kill{instance="node-exporter:9100"} 0')
             lines.append(f'node_vmstat_pgscan_kswapd{{instance="node-exporter:9100"}} {int(elapsed * 12)}')
 
-            for svc in SERVICES_DIRECTORY:
+            for s_idx, svc in enumerate(SERVICES_DIRECTORY):
                 s_name = svc["name"]
                 ns = svc["namespace"]
                 base_rps = svc["rps"] + math.sin(elapsed / 60.0) * 3
