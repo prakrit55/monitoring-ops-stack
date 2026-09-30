@@ -310,10 +310,10 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (route, method) (rate(http_requests_total{job=~\"$service\"}[2m])) or sum by (route, method) (label_replace(rate(http_requests_total{job=~\"$service\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route, method) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\"))",
+          "expr": "sum by (path, method) (rate(http_requests_total{job=~\"$service\"}[2m])) or sum by (path, method) (rate(http_server_requests_seconds_count{job=~\"$service\"}[2m]))",
           "format": "table",
           "instant": true,
-          "legendFormat": "",
+          "legendFormat": "{{method}} {{path}} - RPS",
           "range": false,
           "refId": "A"
         },
@@ -323,10 +323,10 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, route, method) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])) or sum by (le, route, method) (label_replace(rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (le, route, method) (label_replace(rate(http_server_requests_seconds_bucket{job=~\"$service\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\")))",
+          "expr": "histogram_quantile(0.95, sum by (le, path, method) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
           "format": "table",
           "instant": true,
-          "legendFormat": "",
+          "legendFormat": "{{method}} {{path}} - P95",
           "range": false,
           "refId": "B"
         },
@@ -336,10 +336,10 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "((sum by (route, method) (rate(http_requests_total{job=~\"$service\", status_code=~\"5.*|5..\"}[2m])) or sum by (route, method) (label_replace(rate(http_requests_total{job=~\"$service\", status_code=~\"5.*|5..\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route, method) (label_replace(label_replace(rate(http_server_requests_seconds_count{job=~\"$service\", status=~\"5.*|5..\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\"), \"status_code\", \"$1\", \"status\", \"(.*)\"))) / (sum by (route, method) (rate(http_requests_total{job=~\"$service\"}[2m])) or sum by (route, method) (label_replace(rate(http_requests_total{job=~\"$service\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route, method) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\")))) * 100",
+          "expr": "((sum by (path, method) (rate(http_requests_total{job=~\"$service\", status_code=~\"5..\"}[2m]))) / (sum by (path, method) (rate(http_requests_total{job=~\"$service\"}[2m])))) * 100",
           "format": "table",
           "instant": true,
-          "legendFormat": "",
+          "legendFormat": "{{method}} {{path}} - 5xx Rate",
           "range": false,
           "refId": "C"
         }
@@ -349,7 +349,7 @@
         {
           "id": "joinByField",
           "options": {
-            "byField": "route",
+            "byField": "path",
             "mode": "outer"
           }
         },
@@ -362,21 +362,25 @@
               "Time 2": true,
               "__name__": true,
               "__name__ 1": true,
-              "__name__ 2": true
+              "__name__ 2": true,
+              "method 1": true,
+              "method 2": true,
+              "path 1": true,
+              "path 2": true
             },
             "indexByName": {
-              "route": 0,
+              "path": 0,
               "method": 1,
               "Value #A": 2,
               "Value #B": 3,
               "Value #C": 4
             },
             "renameByName": {
+              "path": "Endpoint URI / Route",
+              "method": "HTTP Method",
               "Value #A": "Ingress RPS",
               "Value #B": "P95 Latency",
-              "Value #C": "5xx Error Rate (%)",
-              "method": "HTTP Method",
-              "route": "Endpoint URI / Route"
+              "Value #C": "5xx Error Rate (%)"
             }
           }
         }
@@ -450,8 +454,9 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_requests_total{job=~\"$service\", route=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum(rate(http_requests_total{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum(rate(http_server_requests_seconds_count{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum(rate(http_requests_total{job=~\"$service\"}[$__rate_interval]))",
-          "legendFormat": "Total RPS",
+          "expr": "sum(rate(http_requests_total{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m]))",
+          "format": "time_series",
+          "instant": false,
           "range": true,
           "refId": "A"
         }
@@ -471,7 +476,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
-          "noValue": "0 ms",
+          "noValue": "0 s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -522,8 +527,9 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", route=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[$__rate_interval])))",
-          "legendFormat": "P95 Latency",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m])))",
+          "format": "time_series",
+          "instant": false,
           "range": true,
           "refId": "A"
         }
@@ -543,7 +549,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
-          "noValue": "0 ms",
+          "noValue": "0 s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -594,8 +600,9 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", route=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[$__rate_interval])))",
-          "legendFormat": "P99 Latency",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m])))",
+          "format": "time_series",
+          "instant": false,
           "range": true,
           "refId": "A"
         }
@@ -667,8 +674,9 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "((sum(rate(http_requests_total{job=~\"$service\", route=~\"$route\", method=~\"$method\", status_code=~\"5.*|5..\"}[$__rate_interval])) or sum(rate(http_requests_total{job=~\"$service\", path=~\"$route\", method=~\"$method\", status_code=~\"5.*|5..\"}[$__rate_interval])) or sum(rate(http_server_requests_seconds_count{job=~\"$service\", uri=~\"$route\", method=~\"$method\", status=~\"5.*|5..\"}[$__rate_interval])) or sum(rate(http_requests_total{job=~\"$service\", status_code=~\"5.*|5..\"}[$__rate_interval]))) / (sum(rate(http_requests_total{job=~\"$service\", route=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum(rate(http_requests_total{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum(rate(http_server_requests_seconds_count{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[$__rate_interval])) or sum(rate(http_requests_total{job=~\"$service\"}[$__rate_interval])))) * 100",
-          "legendFormat": "5xx Error Rate",
+          "expr": "((sum(rate(http_requests_total{job=~\"$service\", path=~\"$route\", method=~\"$method\", status_code=~\"5..\"}[2m])) or 0) / (sum(rate(http_requests_total{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m])))) * 100",
+          "format": "time_series",
+          "instant": false,
           "range": true,
           "refId": "A"
         }
@@ -739,8 +747,9 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(http_requests_in_flight{job=~\"$service\"}) or sum(http_server_requests_active_seconds_count{job=~\"$service\"}) or 0",
-          "legendFormat": "Active In-Flight Sockets",
+          "expr": "sum(http_requests_in_flight{job=~\"$service\"}) or sum(http_server_requests_active_seconds_count{job=~\"$service\"}) or vector(0)",
+          "format": "time_series",
+          "instant": false,
           "range": true,
           "refId": "A"
         }
@@ -1651,7 +1660,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", route=~\"$route\", method=~\"$method\", route!=\"\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", route=~\"$route\", method=~\"$method\", path!=\"\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
           "legendFormat": "P50 Latency",
           "range": true,
           "refId": "A"
@@ -1662,7 +1671,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.90, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", route=~\"$route\", method=~\"$method\", route!=\"\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
+          "expr": "histogram_quantile(0.90, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", route=~\"$route\", method=~\"$method\", path!=\"\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
           "legendFormat": "P90 Latency",
           "range": true,
           "refId": "B"
@@ -1673,7 +1682,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", route=~\"$route\", method=~\"$method\", route!=\"\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", route=~\"$route\", method=~\"$method\", path!=\"\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
           "legendFormat": "P95 Latency",
           "range": true,
           "refId": "C"
@@ -1684,7 +1693,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", route=~\"$route\", method=~\"$method\", route!=\"\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", route=~\"$route\", method=~\"$method\", path!=\"\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\", path=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"$service\", uri=~\"$route\", method=~\"$method\"}[2m])) or sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
           "legendFormat": "P99 Latency",
           "range": true,
           "refId": "D"
@@ -1931,7 +1940,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (route) (http_requests_in_flight{job=~\"$service\", route=~\"$route\", route!=\"\"}) or sum by (route) (label_replace(http_requests_in_flight{job=~\"$service\", path=~\"$route\"}, \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route) (label_replace(http_requests_in_flight{job=~\"$service\", uri=~\"$route\"}, \"route\", \"$1\", \"uri\", \"(.*)\")) or sum by (job) (http_requests_in_flight{job=~\"$service\"})",
+          "expr": "sum by (route) (http_requests_in_flight{job=~\"$service\", route=~\"$route\", path!=\"\"}) or sum by (route) (label_replace(http_requests_in_flight{job=~\"$service\", path=~\"$route\"}, \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route) (label_replace(http_requests_in_flight{job=~\"$service\", uri=~\"$route\"}, \"route\", \"$1\", \"uri\", \"(.*)\")) or sum by (job) (http_requests_in_flight{job=~\"$service\"})",
           "legendFormat": "{{route}}{{job}}",
           "range": true,
           "refId": "A"
@@ -2027,7 +2036,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (route) (rate(http_requests_total{job=~\"$service\", route=~\"$route\", route!=\"\", status_code=~\"499|408\"}[2m])) or sum by (route) (label_replace(rate(http_requests_total{job=~\"$service\", path=~\"$route\", status_code=~\"499|408\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\", uri=~\"$route\", status=~\"499|408\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\"))",
+          "expr": "sum by (route) (rate(http_requests_total{job=~\"$service\", route=~\"$route\", path!=\"\", status_code=~\"499|408\"}[2m])) or sum by (route) (label_replace(rate(http_requests_total{job=~\"$service\", path=~\"$route\", status_code=~\"499|408\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\", uri=~\"$route\", status=~\"499|408\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\"))",
           "legendFormat": "{{route}} - Client Abort/Timeout",
           "range": true,
           "refId": "A"
@@ -2106,7 +2115,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_response_size_bytes_bucket{job=~\"$service\", route=~\"$route\", route!=\"\"}[2m]))) or histogram_quantile(0.95, sum by (le, route) (label_replace(rate(http_response_size_bytes_bucket{job=~\"$service\", path=~\"$route\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\"))) or histogram_quantile(0.95, sum by (le, route) (label_replace(rate(http_server_response_bytes_bucket{job=~\"$service\", uri=~\"$route\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\"))) or (rate(http_response_bytes_total{job=~\"$service\"}[2m]) / rate(http_requests_total{job=~\"$service\"}[2m]))",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_response_size_bytes_bucket{job=~\"$service\", route=~\"$route\", path!=\"\"}[2m]))) or histogram_quantile(0.95, sum by (le, route) (label_replace(rate(http_response_size_bytes_bucket{job=~\"$service\", path=~\"$route\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\"))) or histogram_quantile(0.95, sum by (le, route) (label_replace(rate(http_server_response_bytes_bucket{job=~\"$service\", uri=~\"$route\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\"))) or (rate(http_response_bytes_total{job=~\"$service\"}[2m]) / rate(http_requests_total{job=~\"$service\"}[2m]))",
           "legendFormat": "{{route}}{{job}} - P95 Payload",
           "range": true,
           "refId": "A"
@@ -2161,7 +2170,9 @@
             }
           },
           "mappings": [],
-          "unit": "reqps"
+          "unit": "reqps",
+          "nullValueMode": "as zero",
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -2196,9 +2207,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (route, status_code) (rate(http_requests_total{job=~\"$service\", route=~\"$route\", route!=\"\", status_code=~\"[45]..\"}[2m])) or sum by (route, status_code) (label_replace(rate(http_requests_total{job=~\"$service\", path=~\"$route\", status_code=~\"[45]..\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route, status_code) (label_replace(label_replace(rate(http_server_requests_seconds_count{job=~\"$service\", uri=~\"$route\", status=~\"[45]..\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\"), \"status_code\", \"$1\", \"status\", \"(.*)\"))",
-          "legendFormat": "{{route}} [{{status_code}}]",
-          "range": true,
+          "expr": "sum by (path, status_code) (rate(http_requests_total{job=~\"$service\", path=~\"$route\", status_code=~\"[45]..\"}[2m])) or vector(0)",
+          "legendFormat": "{{path}} [{{status_code}}]",
           "refId": "A"
         }
       ],
@@ -2240,7 +2250,8 @@
           },
           "mappings": [],
           "noValue": "0",
-          "unit": "short"
+          "unit": "short",
+          "nullValueMode": "as zero"
         },
         "overrides": []
       },
@@ -2275,13 +2286,12 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (exception_type, endpoint) (rate(service_exceptions_total{job=~\"$service\"}[2m])) or sum by (exception_type, operation) (rate(service_exceptions_total{job=~\"$service\"}[2m])) or sum by (exception_type) (rate(service_exceptions_total{job=~\"$service\"}[2m])) or sum by (job) (rate(service_exceptions_total{job=~\"$service\"}[2m])) or 0",
-          "legendFormat": "{{exception_type}} ({{endpoint}}{{operation}})",
-          "range": true,
+          "expr": "sum by (exception, path) (rate(http_server_exceptions_total{job=~\"$service\", path=~\"$route\"}[2m])) or sum by (path) (rate(http_requests_total{job=~\"$service\", path=~\"$route\", status_code=~\"500\"}[2m])) or vector(0)",
+          "legendFormat": "{{exception}} {{path}}",
           "refId": "A"
         }
       ],
-      "title": "Service Operational Exceptions & Failures",
+      "title": "Service Exceptions and Unhandled Failures",
       "type": "timeseries"
     },
     {
@@ -2484,9 +2494,9 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values({__name__=~\"http_requests_total|http_server_requests_seconds_count\"}, job)",
+        "definition": "label_values(http_requests_total, job)",
         "hide": 0,
-        "includeAll": true,
+        "includeAll": false,
         "label": "Service",
         "multi": false,
         "name": "service",
@@ -2553,7 +2563,7 @@
           }
         ],
         "query": {
-          "query": "label_values({__name__=~\"http_requests_total|http_server_requests_seconds_count\"}, job)",
+          "query": "label_values(http_requests_total, job)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
@@ -2572,7 +2582,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(http_requests_total, method)",
+        "definition": "label_values(http_requests_total{job=~\"$service\"}, method)",
         "hide": 0,
         "includeAll": true,
         "label": "Method",
@@ -2611,7 +2621,7 @@
           }
         ],
         "query": {
-          "query": "label_values(http_requests_total, method)",
+          "query": "label_values(http_requests_total{job=~\"$service\"}, method)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
@@ -2630,7 +2640,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values({job=~\"$service\"}, route) or label_values({job=~\"$service\"}, path) or label_values({job=~\"$service\"}, uri)",
+        "definition": "label_values(http_requests_total{job=~\"$service\"}, path)",
         "hide": 0,
         "includeAll": true,
         "label": "Route",
@@ -2638,7 +2648,7 @@
         "name": "route",
         "options": [],
         "query": {
-          "query": "label_values({job=~\"$service\"}, route) or label_values({job=~\"$service\"}, path) or label_values({job=~\"$service\"}, uri)",
+          "query": "label_values(http_requests_total{job=~\"$service\"}, path)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 2,
