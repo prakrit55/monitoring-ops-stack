@@ -310,10 +310,10 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (endpoint) (rate(http_requests_total{job=~\"$service\"}[2m])) or sum by (endpoint) (label_replace(rate(http_requests_total{job=~\"$service\"}[2m]), \"endpoint\", \"$1\", \"path\", \"(.*)\")) or sum by (endpoint) (label_replace(rate(http_requests_total{job=~\"$service\"}[2m]), \"endpoint\", \"$1\", \"route\", \"(.*)\")) or sum by (endpoint) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\"}[2m]), \"endpoint\", \"$1\", \"uri\", \"(.*)\"))",
+          "expr": "sum by (path) (rate(http_requests_total{job=~\"$service\"}[2m]))",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{endpoint}} - RPS",
+          "legendFormat": "{{path}} - RPS",
           "range": false,
           "refId": "A"
         },
@@ -323,10 +323,10 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, endpoint) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])) or sum by (le, endpoint) (label_replace(rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m]), \"endpoint\", \"$1\", \"path\", \"(.*)\")) or sum by (le, endpoint) (label_replace(rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m]), \"endpoint\", \"$1\", \"route\", \"(.*)\")) or sum by (le, endpoint) (label_replace(rate(http_server_requests_seconds_bucket{job=~\"$service\"}[2m]), \"endpoint\", \"$1\", \"uri\", \"(.*)\"))) ",
+          "expr": "histogram_quantile(0.95, sum by (le, path) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{endpoint}} - P95",
+          "legendFormat": "{{path}} - P95",
           "range": false,
           "refId": "B"
         },
@@ -336,10 +336,10 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "((sum by (endpoint) (rate(http_requests_total{job=~\"$service\", status_code=~\"5..\"}[2m])) or sum by (endpoint) (label_replace(rate(http_requests_total{job=~\"$service\", status_code=~\"5..\"}[2m]), \"endpoint\", \"$1\", \"path\", \"(.*)\")) or sum by (endpoint) (label_replace(rate(http_requests_total{job=~\"$service\", status_code=~\"5..\"}[2m]), \"endpoint\", \"$1\", \"route\", \"(.*)\")) or sum by (endpoint) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\", status=~\"5..\"}[2m]), \"endpoint\", \"$1\", \"uri\", \"(.*)\"))) / (sum by (endpoint) (rate(http_requests_total{job=~\"$service\"}[2m])) or sum by (endpoint) (label_replace(rate(http_requests_total{job=~\"$service\"}[2m]), \"endpoint\", \"$1\", \"path\", \"(.*)\")) or sum by (endpoint) (label_replace(rate(http_requests_total{job=~\"$service\"}[2m]), \"endpoint\", \"$1\", \"route\", \"(.*)\")) or sum by (endpoint) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\"}[2m]), \"endpoint\", \"$1\", \"uri\", \"(.*)\")))) * 100",
+          "expr": "(sum by (path) (rate(http_requests_total{job=~\"$service\", status_code=~\"5..\"}[2m])) / sum by (path) (rate(http_requests_total{job=~\"$service\"}[2m]))) * 100",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{endpoint}} - 5xx Rate",
+          "legendFormat": "{{path}} - 5xx Rate",
           "range": false,
           "refId": "C"
         }
@@ -349,7 +349,7 @@
         {
           "id": "joinByField",
           "options": {
-            "byField": "endpoint",
+            "byField": "path",
             "mode": "outer"
           }
         },
@@ -361,20 +361,20 @@
               "Time 1": true,
               "Time 2": true,
               "Time 3": true,
-              "endpoint 1": true,
-              "endpoint 2": true,
+              "path 1": true,
+              "path 2": true,
               "__name__": true,
               "__name__ 1": true,
               "__name__ 2": true
             },
             "indexByName": {
-              "endpoint": 0,
+              "path": 0,
               "Value #A": 1,
               "Value #B": 2,
               "Value #C": 3
             },
             "renameByName": {
-              "endpoint": "Endpoint URI / Route",
+              "path": "Endpoint URI / Route",
               "Value #A": "Ingress RPS",
               "Value #B": "P95 Latency",
               "Value #C": "5xx Error Rate (%)"
@@ -2493,7 +2493,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values({__name__=~\"http_requests_total|http_server_requests_seconds_count\"}, job)",
+        "definition": "label_values(http_requests_total, job)",
         "hide": 0,
         "includeAll": false,
         "label": "Service",
@@ -2562,7 +2562,7 @@
           }
         ],
         "query": {
-          "query": "label_values({__name__=~\"http_requests_total|http_server_requests_seconds_count\"}, job)",
+          "query": "label_values(http_requests_total, job)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
@@ -2581,7 +2581,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values({job=~\"$service\"}, method)",
+        "definition": "label_values(http_requests_total{job=~\"$service\"}, method)",
         "hide": 0,
         "includeAll": true,
         "label": "Method",
@@ -2620,7 +2620,7 @@
           }
         ],
         "query": {
-          "query": "label_values({job=~\"$service\"}, method)",
+          "query": "label_values(http_requests_total{job=~\"$service\"}, method)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
@@ -2639,7 +2639,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values({job=~\"$service\"}, route) or label_values({job=~\"$service\"}, path) or label_values({job=~\"$service\"}, uri)",
+        "definition": "label_values(http_requests_total{job=~\"$service\"}, path)",
         "hide": 0,
         "includeAll": true,
         "label": "Route",
@@ -2647,7 +2647,7 @@
         "name": "route",
         "options": [],
         "query": {
-          "query": "label_values({job=~\"$service\"}, route) or label_values({job=~\"$service\"}, path) or label_values({job=~\"$service\"}, uri)",
+          "query": "label_values(http_requests_total{job=~\"$service\"}, path)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
