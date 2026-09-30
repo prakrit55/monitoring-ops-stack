@@ -310,7 +310,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (path) (rate(http_requests_total{job=~\"$service\"}[2m]))",
+          "expr": "sum by (path) (rate(http_requests_total{job=~\"$service\"}[5m])) or sum by (path) (label_replace(rate(http_requests_total{job=~\"$service\"}[5m]), \"path\", \"$1\", \"endpoint\", \"(.*)\"))",
           "format": "table",
           "instant": true,
           "legendFormat": "{{path}} - RPS",
@@ -323,7 +323,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, path) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, path) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[5m])) or sum by (le, path) (label_replace(rate(http_request_duration_seconds_bucket{job=~\"$service\"}[5m]), \"path\", \"$1\", \"endpoint\", \"(.*)\")))",
           "format": "table",
           "instant": true,
           "legendFormat": "{{path}} - P95",
@@ -336,7 +336,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(sum by (path) (rate(http_requests_total{job=~\"$service\", status_code=~\"5..\"}[2m])) / sum by (path) (rate(http_requests_total{job=~\"$service\"}[2m]))) * 100",
+          "expr": "((sum by (path) (rate(http_requests_total{job=~\"$service\", status_code=~\"5..\"}[5m])) or sum by (path) (label_replace(rate(http_requests_total{job=~\"$service\", status_code=~\"5..\"}[5m]), \"path\", \"$1\", \"endpoint\", \"(.*)\"))) / (sum by (path) (rate(http_requests_total{job=~\"$service\"}[5m])) or sum by (path) (label_replace(rate(http_requests_total{job=~\"$service\"}[5m]), \"path\", \"$1\", \"endpoint\", \"(.*)\")))) * 100",
           "format": "table",
           "instant": true,
           "legendFormat": "{{path}} - 5xx Rate",

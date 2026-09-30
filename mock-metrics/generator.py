@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """
 Synthetic Prometheus RED and Kubernetes Metrics Generator
-Emits dynamic counters, histograms, and gauges for local observability validation.
-Provides distinct, realistic API endpoints and metrics for each service.
+Emits dynamic counters, histograms, and gauges matching the full Service API Directory:
+- ecommerce-ui
+- product-catalog
+- product-inventory
+- shipping-and-handling
+- order-management
+- contact-support-team / contact-support
+- service-a, service-b, service-c, service-d
 """
 
 import time
@@ -12,136 +18,161 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 START_TIME = time.time()
 
-SERVICES_CONFIG = [
+SERVICES_DIRECTORY = [
+    {
+        "name": "ecommerce-ui",
+        "aliases": ["ecommerce-ui"],
+        "namespace": "production",
+        "rps": 60,
+        "err_ratio": 0.008,
+        "p99": 0.06,
+        "paths": [
+            ("POST", "/api/signup"),
+            ("POST", "/api/signin"),
+            ("GET", "/api/profile"),
+            ("GET", "/api/products"),
+            ("GET", "/api/products/:id"),
+            ("GET", "/api/inventory"),
+            ("GET", "/api/inventory/:id"),
+            ("GET", "/api/orders/:userId/cart"),
+            ("POST", "/api/orders/:userId/cart"),
+            ("GET", "/api/orders/:userId/cart/subtotal"),
+            ("GET", "/api/orders/:userId/cart/shipping"),
+            ("GET", "/api/orders/:userId/cart/total"),
+            ("POST", "/api/orders/:userId/purchase"),
+            ("GET", "/api/shipping-explanation"),
+            ("GET", "/api/all-shipping-fees"),
+            ("GET", "/api/contact-message"),
+            ("POST", "/api/contact-submit"),
+            ("GET", "/"),
+        ]
+    },
+    {
+        "name": "product-catalog",
+        "aliases": ["product-catalog"],
+        "namespace": "production",
+        "rps": 45,
+        "err_ratio": 0.003,
+        "p99": 0.04,
+        "paths": [
+            ("GET", "/api/products"),
+            ("GET", "/api/products/:id"),
+            ("GET", "/metrics"),
+        ]
+    },
+    {
+        "name": "product-inventory",
+        "aliases": ["product-inventory"],
+        "namespace": "production",
+        "rps": 30,
+        "err_ratio": 0.005,
+        "p99": 0.05,
+        "paths": [
+            ("GET", "/api/inventory"),
+            ("GET", "/api/inventory/<int:product_id>"),
+            ("POST", "/api/order/<int:product_id>"),
+            ("GET", "/metrics"),
+        ]
+    },
+    {
+        "name": "shipping-and-handling",
+        "aliases": ["shipping-and-handling"],
+        "namespace": "production",
+        "rps": 20,
+        "err_ratio": 0.010,
+        "p99": 0.08,
+        "paths": [
+            ("POST", "/shipping-fee"),
+            ("GET", "/shipping-explanation"),
+            ("GET", "/all-shipping-fees"),
+            ("GET", "/metrics"),
+        ]
+    },
+    {
+        "name": "order-management",
+        "aliases": ["order-management"],
+        "namespace": "production",
+        "rps": 25,
+        "err_ratio": 0.012,
+        "p99": 0.12,
+        "paths": [
+            ("GET", "/api/orders/{userId}/cart"),
+            ("POST", "/api/orders/{userId}/cart"),
+            ("GET", "/api/orders/{userId}/cart/subtotal"),
+            ("GET", "/api/orders/{userId}/cart/shipping"),
+            ("GET", "/api/orders/{userId}/cart/total"),
+            ("POST", "/api/orders/{userId}/purchase"),
+            ("GET", "/actuator/health"),
+            ("GET", "/actuator/prometheus"),
+        ]
+    },
+    {
+        "name": "contact-support-team",
+        "aliases": ["contact-support-team", "contact-support"],
+        "namespace": "production",
+        "rps": 15,
+        "err_ratio": 0.006,
+        "p99": 0.07,
+        "paths": [
+            ("GET", "/api/contact-message"),
+            ("POST", "/api/contact-submit"),
+            ("GET", "/metrics"),
+        ]
+    },
     {
         "name": "service-a",
+        "aliases": ["service-a"],
         "namespace": "test",
-        "rps": 45,
+        "rps": 40,
         "err_ratio": 0.005,
         "p99": 0.08,
         "paths": [
-            ("/api/service-a/process", "POST"),
-            ("/api/service-a/status", "GET"),
-            ("/api/service-a/calculate", "POST"),
-            ("/healthz", "GET"),
+            ("POST", "/api/service-a/process"),
+            ("GET", "/api/service-a/status"),
+            ("POST", "/api/service-a/calculate"),
+            ("GET", "/healthz"),
         ]
     },
     {
         "name": "service-b",
+        "aliases": ["service-b"],
         "namespace": "test",
         "rps": 30,
         "err_ratio": 0.002,
         "p99": 0.05,
         "paths": [
-            ("/api/service-b/auth", "POST"),
-            ("/api/service-b/validate", "GET"),
-            ("/api/service-b/token", "GET"),
-            ("/healthz", "GET"),
+            ("POST", "/api/service-b/auth"),
+            ("GET", "/api/service-b/validate"),
+            ("GET", "/api/service-b/token"),
+            ("GET", "/healthz"),
         ]
     },
     {
         "name": "service-c",
+        "aliases": ["service-c"],
         "namespace": "test",
         "rps": 20,
         "err_ratio": 0.015,
         "p99": 0.12,
         "paths": [
-            ("/api/service-c/call-grpc", "POST"),
-            ("/api/service-c/data", "GET"),
-            ("/api/service-c/", "GET"),
-            ("/healthz", "GET"),
+            ("POST", "/api/service-c/call-grpc"),
+            ("GET", "/api/service-c/data"),
+            ("GET", "/api/service-c/"),
+            ("GET", "/healthz"),
         ]
     },
     {
         "name": "service-d",
+        "aliases": ["service-d"],
         "namespace": "test",
         "rps": 15,
         "err_ratio": 0.045,
         "p99": 0.35,
         "paths": [
-            ("/api/service-d/analyze", "POST"),
-            ("/api/service-d/reports", "GET"),
-            ("/api/service-d/export", "POST"),
-            ("/healthz", "GET"),
-        ]
-    },
-    {
-        "name": "ecommerce-ui",
-        "namespace": "production",
-        "rps": 55,
-        "err_ratio": 0.008,
-        "p99": 0.06,
-        "paths": [
-            ("/api/products", "GET"),
-            ("/api/orders/user123/cart", "GET"),
-            ("/api/orders/user123/purchase", "POST"),
-            ("/api/profile", "GET"),
-            ("/api/signup", "POST"),
-            ("/healthz", "GET"),
-        ]
-    },
-    {
-        "name": "product-catalog",
-        "namespace": "production",
-        "rps": 40,
-        "err_ratio": 0.003,
-        "p99": 0.04,
-        "paths": [
-            ("/api/products", "GET"),
-            ("/api/products/101", "GET"),
-            ("/api/products/categories", "GET"),
-            ("/healthz", "GET"),
-        ]
-    },
-    {
-        "name": "product-inventory",
-        "namespace": "production",
-        "rps": 25,
-        "err_ratio": 0.004,
-        "p99": 0.05,
-        "paths": [
-            ("/api/inventory", "GET"),
-            ("/api/inventory/101", "GET"),
-            ("/api/order/101", "POST"),
-            ("/healthz", "GET"),
-        ]
-    },
-    {
-        "name": "shipping-and-handling",
-        "namespace": "production",
-        "rps": 18,
-        "err_ratio": 0.010,
-        "p99": 0.09,
-        "paths": [
-            ("/shipping-fee", "POST"),
-            ("/shipping-explanation", "GET"),
-            ("/all-shipping-fees", "GET"),
-            ("/healthz", "GET"),
-        ]
-    },
-    {
-        "name": "order-management",
-        "namespace": "production",
-        "rps": 22,
-        "err_ratio": 0.012,
-        "p99": 0.15,
-        "paths": [
-            ("/api/orders/cart", "GET"),
-            ("/api/orders/checkout", "POST"),
-            ("/api/orders/subtotal", "GET"),
-            ("/actuator/health", "GET"),
-        ]
-    },
-    {
-        "name": "contact-support-team",
-        "namespace": "production",
-        "rps": 10,
-        "err_ratio": 0.006,
-        "p99": 0.07,
-        "paths": [
-            ("/api/contact-message", "GET"),
-            ("/api/contact-submit", "POST"),
-            ("/healthz", "GET"),
+            ("POST", "/api/service-d/analyze"),
+            ("GET", "/api/service-d/reports"),
+            ("POST", "/api/service-d/export"),
+            ("GET", "/healthz"),
         ]
     }
 ]
@@ -196,56 +227,58 @@ class MetricsHandler(BaseHTTPRequestHandler):
             lines.append('node_vmstat_oom_kill{instance="node-exporter:9100"} 0')
             lines.append(f'node_vmstat_pgscan_kswapd{{instance="node-exporter:9100"}} {int(elapsed * 12)}')
 
-            for svc in SERVICES_CONFIG:
+            for svc in SERVICES_DIRECTORY:
                 s_name = svc["name"]
                 ns = svc["namespace"]
                 base_rps = svc["rps"] + math.sin(elapsed / 60.0) * 3
                 err_ratio = svc["err_ratio"]
                 paths = svc["paths"]
+                job_names = svc.get("aliases", [s_name])
                 
-                # Pod counts
-                for p_idx in [1, 2]:
-                    pod_name = f"{s_name}-6f8b9d-{p_idx}"
-                    lines.append(f'kube_pod_status_ready{{namespace="{ns}", pod="{pod_name}", condition="true"}} 1')
-                    lines.append(f'container_cpu_cfs_throttled_periods_total{{namespace="{ns}", pod="{pod_name}", container="{s_name}"}} {int(elapsed * (5 + p_idx * 2))}')
-                    lines.append(f'container_cpu_cfs_periods_total{{namespace="{ns}", pod="{pod_name}", container="{s_name}"}} {int(elapsed * 100)}')
-                    
-                    # Memory usage vs limits
-                    mem_limit = 512 * 1024 * 1024  # 512 MiB
-                    mem_used = int(mem_limit * (0.65 + 0.15 * math.sin(elapsed / 120.0 + p_idx)))
-                    lines.append(f'kube_pod_container_resource_limits{{namespace="{ns}", pod="{pod_name}", container="{s_name}", resource="memory"}} {mem_limit}')
-                    lines.append(f'container_memory_working_set_bytes{{namespace="{ns}", pod="{pod_name}", container="{s_name}"}} {mem_used}')
+                for j_name in job_names:
+                    # Pod counts
+                    for p_idx in [1, 2]:
+                        pod_name = f"{j_name}-6f8b9d-{p_idx}"
+                        lines.append(f'kube_pod_status_ready{{namespace="{ns}", pod="{pod_name}", condition="true"}} 1')
+                        lines.append(f'container_cpu_cfs_throttled_periods_total{{namespace="{ns}", pod="{pod_name}", container="{j_name}"}} {int(elapsed * (5 + p_idx * 2))}')
+                        lines.append(f'container_cpu_cfs_periods_total{{namespace="{ns}", pod="{pod_name}", container="{j_name}"}} {int(elapsed * 100)}')
+                        
+                        # Memory usage vs limits
+                        mem_limit = 512 * 1024 * 1024  # 512 MiB
+                        mem_used = int(mem_limit * (0.65 + 0.15 * math.sin(elapsed / 120.0 + p_idx)))
+                        lines.append(f'kube_pod_container_resource_limits{{namespace="{ns}", pod="{pod_name}", container="{j_name}", resource="memory"}} {mem_limit}')
+                        lines.append(f'container_memory_working_set_bytes{{namespace="{ns}", pod="{pod_name}", container="{j_name}"}} {mem_used}')
 
-                # Deployment rollout generation
-                gen = int(1 + (elapsed // 300))
-                lines.append(f'kube_deployment_status_observed_generation{{namespace="{ns}", deployment="{s_name}"}} {gen}')
+                    # Deployment rollout generation
+                    gen = int(1 + (elapsed // 300))
+                    lines.append(f'kube_deployment_status_observed_generation{{namespace="{ns}", deployment="{j_name}"}} {gen}')
 
-                # In-flight gauge
-                lines.append(f'http_requests_in_flight{{job="{s_name}", service="{s_name}", namespace="{ns}"}} {max(1, int(base_rps * 0.15))}')
+                    # In-flight gauge
+                    lines.append(f'http_requests_in_flight{{job="{j_name}", service="{j_name}", namespace="{ns}"}} {max(1, int(base_rps * 0.15))}')
 
-                # Request counters & histograms per path (emit both path and route for universal compatibility)
-                for path, method in paths:
-                    total_reqs = int(elapsed * (base_rps / len(paths))) + 1
-                    err_reqs = max(0, int(total_reqs * err_ratio))
-                    client_err_reqs = max(0, int(total_reqs * 0.02))
-                    success_reqs = max(0, total_reqs - err_reqs - client_err_reqs)
+                    # Request counters & histograms per path
+                    for method, path in paths:
+                        # Individual variance per endpoint
+                        path_weight = 1.0 + (hash(path) % 5) * 0.2
+                        total_reqs = int(elapsed * (base_rps * path_weight / len(paths))) + 1
+                        err_reqs = max(0, int(total_reqs * err_ratio))
+                        client_err_reqs = max(0, int(total_reqs * 0.02))
+                        success_reqs = max(0, total_reqs - err_reqs - client_err_reqs)
 
-                    # 200 Success
-                    lines.append(f'http_requests_total{{job="{s_name}", service="{s_name}", namespace="{ns}", status="200", status_code="200", method="{method}", path="{path}", route="{path}"}} {success_reqs}')
-                    # 404 Client Error
-                    lines.append(f'http_requests_total{{job="{s_name}", service="{s_name}", namespace="{ns}", status="404", status_code="404", method="{method}", path="{path}", route="{path}"}} {client_err_reqs}')
-                    # 500 Server Error
-                    lines.append(f'http_requests_total{{job="{s_name}", service="{s_name}", namespace="{ns}", status="500", status_code="500", method="{method}", path="{path}", route="{path}"}} {err_reqs}')
+                        # Emit path, route, and endpoint for universal compatibility across all PromQL styles
+                        lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="200", status_code="200", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {success_reqs}')
+                        lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="404", status_code="404", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {client_err_reqs}')
+                        lines.append(f'http_requests_total{{job="{j_name}", service="{j_name}", namespace="{ns}", status="500", status_code="500", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {err_reqs}')
 
-                    # Latency histogram distribution
-                    sum_duration = total_reqs * (svc["p99"] * 0.4)
-                    for le in LE_BUCKETS:
-                        fraction = min(1.0, 1.0 - math.exp(-le / (svc["p99"] * 0.3)))
-                        bucket_count = int(total_reqs * fraction)
-                        lines.append(f'http_request_duration_seconds_bucket{{job="{s_name}", service="{s_name}", namespace="{ns}", method="{method}", path="{path}", route="{path}", le="{le}"}} {bucket_count}')
-                    lines.append(f'http_request_duration_seconds_bucket{{job="{s_name}", service="{s_name}", namespace="{ns}", method="{method}", path="{path}", route="{path}", le="+Inf"}} {total_reqs}')
-                    lines.append(f'http_request_duration_seconds_sum{{job="{s_name}", service="{s_name}", namespace="{ns}", method="{method}", path="{path}", route="{path}"}} {sum_duration:.4f}')
-                    lines.append(f'http_request_duration_seconds_count{{job="{s_name}", service="{s_name}", namespace="{ns}", method="{method}", path="{path}", route="{path}"}} {total_reqs}')
+                        # Latency histogram distribution
+                        sum_duration = total_reqs * (svc["p99"] * 0.4)
+                        for le in LE_BUCKETS:
+                            fraction = min(1.0, 1.0 - math.exp(-le / (svc["p99"] * 0.3)))
+                            bucket_count = int(total_reqs * fraction)
+                            lines.append(f'http_request_duration_seconds_bucket{{job="{j_name}", service="{j_name}", namespace="{ns}", method="{method}", path="{path}", route="{path}", endpoint="{path}", le="{le}"}} {bucket_count}')
+                        lines.append(f'http_request_duration_seconds_bucket{{job="{j_name}", service="{j_name}", namespace="{ns}", method="{method}", path="{path}", route="{path}", endpoint="{path}", le="+Inf"}} {total_reqs}')
+                        lines.append(f'http_request_duration_seconds_sum{{job="{j_name}", service="{j_name}", namespace="{ns}", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {sum_duration:.4f}')
+                        lines.append(f'http_request_duration_seconds_count{{job="{j_name}", service="{j_name}", namespace="{ns}", method="{method}", path="{path}", route="{path}", endpoint="{path}"}} {total_reqs}')
 
             payload = "\n".join(lines) + "\n"
             self.wfile.write(payload.encode("utf-8"))
@@ -258,5 +291,5 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = HTTPServer(("0.0.0.0", 8080), MetricsHandler)
-    print("Synthetic RED & K8s Metrics Generator listening on port 8080...")
+    print("Synthetic RED & K8s Metrics Generator running with full Service API Directory on port 8080...")
     server.serve_forever()
