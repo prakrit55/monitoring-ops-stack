@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Synthetic Prometheus RED and Kubernetes Metrics Generator
-Emits dynamic counters, histograms, and gauges matching the full Service API Directory:
+Synthetic Prometheus RED and Kubernetes Metrics & Loki Logs Generator
+Emits dynamic counters, histograms, gauges, and correlated structured logs matching the Service API Directory:
 - ecommerce-ui
 - product-catalog
 - product-inventory
@@ -11,12 +11,20 @@ Emits dynamic counters, histograms, and gauges matching the full Service API Dir
 - service-a, service-b, service-c, service-d
 """
 
+import os
+import sys
 import time
 import math
 import random
+import uuid
+import json
+import threading
+import urllib.request
+from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 START_TIME = time.time() - 3600  # Start 1 hour ago so counters have mature history
+LOKI_URL = os.environ.get("LOKI_URL", "http://loki:3100/loki/api/v1/push")
 
 SERVICES_DIRECTORY = [
     {
@@ -336,8 +344,243 @@ class MetricsHandler(BaseHTTPRequestHandler):
         now_str = time.strftime('%Y-%m-%d %H:%M:%S')
         print(f"[{now_str}] {self.client_address[0]} - {format % args}", flush=True)
 
+
+def push_logs_to_loki(loki_payload):
+    """Attempt pushing batched streams to Loki HTTP push API."""
+    try:
+        req = urllib.request.Request(
+            LOKI_URL,
+            data=json.dumps(loki_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
+            pass
+    except Exception:
+        # Loki may be unreachable or initializing; silently fallback to stdout
+        pass
+
+
+def run_mock_log_generator():
+    """
+    Continuously generates realistic structured JSON logs synchronized with Prometheus metrics.
+    Pushes directly to Loki and prints to stdout for Docker/Fluent-Bit log harvesting.
+    """
+    time.sleep(2)  # Short warmup
+    
+    ERROR_MESSAGES = {
+        "ecommerce-ui": [
+            ("DatabaseConnectionTimeout", "Connection pool exhausted to Mongo cluster during product aggregation", "MongoTimeoutException at ConnectionPool.acquire (pool.js:88)"),
+            ("UpstreamService503", "Upstream order-management returned HTTP 503 Service Unavailable", "HttpGatewayError at OrderClient.submit (orderClient.js:42)"),
+            ("RedisCacheError", "Redis connection reset while fetching user session cache", "RedisCommandTimeout at RedisClient.get (redis.js:19)"),
+        ],
+        "product-catalog": [
+            ("MongoQueryError", "Mongo execution error: cursor exceeded maximum time limit 500ms", "MongoExecutionTimeout at Cursor.toArray (mongo.js:105)"),
+            ("SerializationError", "Failed to serialize JSON response payload for category listing", "TypeError at JSON.stringify (<anonymous>)"),
+        ],
+        "product-inventory": [
+            ("DeadlockDetected", "PostgreSQL transaction deadlock detected while updating stock lock", "PSQLException: ERROR: deadlock detected (inventory.py:77)"),
+            ("InventoryShortage", "Requested quantity exceeds available physical SKU stock", "InsufficientStockError: item_id=8831 qty=4 (stock.py:31)"),
+        ],
+        "shipping-and-handling": [
+            ("CarrierAPIError", "FedEx / UPS carrier rates API returned HTTP 500 Internal Error", "CarrierGatewayException at ShippingService.calculateRate (Shipping.java:120)"),
+            ("RateEngineTimeout", "Distance calculation matrix timed out after 3000ms", "TimeoutException at MatrixResolver.resolve (Matrix.java:45)"),
+        ],
+        "order-management": [
+            ("PaymentGatewayException", "Stripe payment capture failed with status: processor_declined", "PaymentError at StripeClient.charge (PaymentGateway.java:94)"),
+            ("KafkaProduceError", "Kafka broker timed out acknowledging order-created event", "KafkaTimeoutException at OrderProducer.send (OrderProducer.java:62)"),
+        ],
+        "contact-support-team": [
+            ("SMTPSendFailed", "SMTP server rejected relay for ticket confirmation email", "SMTPServerDisconnected: Connection unexpectedly closed (mail.py:54)"),
+        ],
+        "service-a": [("WorkerTimeout", "Service-A calculate worker exceeded deadline", "WorkerTimeout: task id 0x8821")],
+        "service-b": [("TokenValidationFailed", "Service-B RSA signature verification failed", "JWTValidationError: Key expired")],
+        "service-c": [("GrpcUnavailable", "Service-C gRPC upstream channel entered TRANSIENT_FAILURE", "StatusRuntimeException: UNAVAILABLE")],
+        "service-d": [("ReportGenerationError", "Service-D memory limit reached during report aggregation", "OOMKilled simulation")],
+    }
+
+    while True:
+        try:
+            now_sec = time.time()
+            now_nano = int(now_sec * 1e9)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            elapsed = now_sec - START_TIME
+
+            streams = []
+
+            for s_idx, svc in enumerate(SERVICES_DIRECTORY):
+                s_name = svc["name"]
+                ns = svc["namespace"]
+                paths = svc["paths"]
+                err_ratio = svc["err_ratio"]
+                p99 = svc["p99"]
+                
+                # Pick 1-2 random endpoint requests per tick
+                sample_count = random.randint(1, 2)
+                for _ in range(sample_count):
+                    method, path = random.choice(paths)
+                    trace_id = uuid.uuid4().hex[:16]
+                    span_id = uuid.uuid4().hex[:16]
+                    
+                    # Determine response code based on error distribution
+                    roll = random.random()
+                    heavy_load_roll = math.sin(elapsed / 80.0 + s_idx)
+                    
+                    if roll < err_ratio:
+                        status = 500
+                        level = "error"
+                        duration_ms = round(random.uniform(p99 * 1.5, p99 * 5.0) * 1000, 2)
+                        err_choice = random.choice(ERROR_MESSAGES.get(s_name, [("ServerError", "Internal server error occurred", "Stack trace")]))
+                        log_body = {
+                            "timestamp": now_iso,
+                            "level": level,
+                            "job": s_name,
+                            "service": s_name,
+                            "namespace": ns,
+                            "environment": "production",
+                            "method": method,
+                            "path": path,
+                            "route": path,
+                            "status": status,
+                            "duration_ms": duration_ms,
+                            "trace_id": trace_id,
+                            "span_id": span_id,
+                            "error_type": err_choice[0],
+                            "message": f"HTTP {method} {path} failed [500]: {err_choice[1]}",
+                            "stack_trace": err_choice[2]
+                        }
+                    elif heavy_load_roll > 0.7 and roll < (err_ratio + 0.04):
+                        status = 499
+                        level = "warn"
+                        duration_ms = round(random.uniform(2500.0, 4500.0), 2)
+                        log_body = {
+                            "timestamp": now_iso,
+                            "level": level,
+                            "job": s_name,
+                            "service": s_name,
+                            "namespace": ns,
+                            "environment": "production",
+                            "method": method,
+                            "path": path,
+                            "route": path,
+                            "status": status,
+                            "duration_ms": duration_ms,
+                            "trace_id": trace_id,
+                            "span_id": span_id,
+                            "error_type": "ClientClosedRequest",
+                            "message": f"HTTP {method} {path} cancelled: Upstream proxy/client aborted connection under heavy load (HTTP 499)"
+                        }
+                    elif heavy_load_roll > 0.8 and roll < (err_ratio + 0.06):
+                        status = 408
+                        level = "warn"
+                        duration_ms = 5000.0
+                        log_body = {
+                            "timestamp": now_iso,
+                            "level": level,
+                            "job": s_name,
+                            "service": s_name,
+                            "namespace": ns,
+                            "environment": "production",
+                            "method": method,
+                            "path": path,
+                            "route": path,
+                            "status": status,
+                            "duration_ms": duration_ms,
+                            "trace_id": trace_id,
+                            "span_id": span_id,
+                            "error_type": "RequestTimeout",
+                            "message": f"HTTP {method} {path} timed out waiting for request payload after {duration_ms}ms (HTTP 408)"
+                        }
+                    elif roll < (err_ratio + 0.05):
+                        status = 404
+                        level = "warn"
+                        duration_ms = round(random.uniform(5.0, 20.0), 2)
+                        log_body = {
+                            "timestamp": now_iso,
+                            "level": level,
+                            "job": s_name,
+                            "service": s_name,
+                            "namespace": ns,
+                            "environment": "production",
+                            "method": method,
+                            "path": path,
+                            "route": path,
+                            "status": status,
+                            "duration_ms": duration_ms,
+                            "trace_id": trace_id,
+                            "span_id": span_id,
+                            "message": f"HTTP {method} {path} resource not found (HTTP 404)"
+                        }
+                    elif roll < (err_ratio + 0.07):
+                        status = 302
+                        level = "info"
+                        duration_ms = round(random.uniform(4.0, 15.0), 2)
+                        log_body = {
+                            "timestamp": now_iso,
+                            "level": level,
+                            "job": s_name,
+                            "service": s_name,
+                            "namespace": ns,
+                            "environment": "production",
+                            "method": method,
+                            "path": path,
+                            "route": path,
+                            "status": status,
+                            "duration_ms": duration_ms,
+                            "trace_id": trace_id,
+                            "span_id": span_id,
+                            "message": f"HTTP {method} {path} redirecting to login session [302 Found]"
+                        }
+                    else:
+                        status = 200
+                        level = "info"
+                        duration_ms = round(max(2.0, random.gauss(p99 * 250, p99 * 50)), 2)
+                        log_body = {
+                            "timestamp": now_iso,
+                            "level": level,
+                            "job": s_name,
+                            "service": s_name,
+                            "namespace": ns,
+                            "environment": "production",
+                            "method": method,
+                            "path": path,
+                            "route": path,
+                            "status": status,
+                            "duration_ms": duration_ms,
+                            "trace_id": trace_id,
+                            "span_id": span_id,
+                            "message": f"HTTP {method} {path} handled successfully [200 OK] in {duration_ms}ms"
+                        }
+
+                    log_json_str = json.dumps(log_body)
+                    
+                    # Print to stdout with flushing so Docker captures it
+                    print(log_json_str, flush=True)
+
+                    # Loki stream format
+                    streams.append({
+                        "stream": {
+                            "job": s_name,
+                            "service": s_name,
+                            "namespace": ns,
+                            "environment": "production",
+                            "level": level
+                        },
+                        "values": [
+                            [str(now_nano), log_json_str]
+                        ]
+                    })
+                    now_nano += 1000000  # Offset timestamps slightly
+
+            if streams:
+                push_logs_to_loki({"streams": streams})
+
+            time.sleep(1.0)
+        except Exception:
+            time.sleep(1.0)
+
+
 if __name__ == "__main__":
-    import sys
     try:
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(line_buffering=True)
@@ -347,11 +590,17 @@ if __name__ == "__main__":
     total_services = len(SERVICES_DIRECTORY)
     total_endpoints = sum(len(s["paths"]) for s in SERVICES_DIRECTORY)
     print("=" * 60, flush=True)
-    print("Synthetic RED & K8s Metrics Generator Started", flush=True)
+    print("Synthetic RED & K8s Metrics + Loki Logs Generator Started", flush=True)
     print(f"Listening on: http://0.0.0.0:8080/metrics", flush=True)
+    print(f"Loki Push Target: {LOKI_URL}", flush=True)
     print(f"Registered Services: {total_services}", flush=True)
     print(f"Total Service Endpoints: {total_endpoints}", flush=True)
     print("=" * 60, flush=True)
-    
+
+    # Start background correlated log generator thread
+    log_thread = threading.Thread(target=run_mock_log_generator, daemon=True)
+    log_thread.start()
+
+    # Serve Prometheus metric scrapes
     server = HTTPServer(("0.0.0.0", 8080), MetricsHandler)
     server.serve_forever()
