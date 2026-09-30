@@ -57,7 +57,7 @@
       }
     ]
   },
-  "description": "Historical log archive, severity distribution, and error search for Ecommerce UI.",
+  "description": "Historical all-time log archive with multi-tier keyword and trace ID search for Ecommerce UI.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -71,7 +71,7 @@
       "tags": [
         "historical-archive"
       ],
-      "title": "Historical Archives",
+      "title": "Application Log Archives",
       "type": "dashboards"
     },
     {
@@ -147,7 +147,7 @@
       },
       "id": 100,
       "panels": [],
-      "title": "Ecommerce UI \u2014 Historical Archive & Long-Term Ingestion Analysis",
+      "title": "Ecommerce UI \u2014 Search & Diagnostic Analytics",
       "type": "row"
     },
     {
@@ -164,20 +164,20 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "Volume (lines)",
+            "axisLabel": "Matched Lines / Sec",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "gradientMode": "none",
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
             "hideFrom": {
               "legend": false,
               "tooltip": false,
               "viz": false
             },
             "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -186,7 +186,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "normal"
+              "mode": "none"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -204,53 +204,7 @@
           },
           "unit": "short"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "error"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "warn"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "info"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "blue",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 7,
@@ -262,8 +216,9 @@
       "options": {
         "legend": {
           "calcs": [
-            "sum",
-            "max"
+            "mean",
+            "max",
+            "sum"
           ],
           "displayMode": "table",
           "placement": "bottom",
@@ -281,13 +236,13 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (level) (count_over_time({job=\"ecommerce-ui\"} | json [$__interval])) or sum(count_over_time({job=\"ecommerce-ui\"} [$__interval]))",
-          "legendFormat": "{{level}}",
+          "expr": "sum(count_over_time({job=\"ecommerce-ui\"} |~ \"(?i)${search:raw}\" |~ \"(?i)${trace_id:raw}\" |~ \"(?i)${level:regex}\" [$__interval]))",
+          "legendFormat": "Matched Logs",
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Historical Ingestion Volume",
+      "title": "Log Ingestion & Matches Over Selected Range",
       "type": "timeseries"
     },
     {
@@ -305,11 +260,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "blue",
                 "value": null
               },
               {
-                "color": "red",
+                "color": "green",
                 "value": 1
               }
             ]
@@ -347,13 +302,13 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({job=\"ecommerce-ui\"} |~ \"(?i)error|exception|fail|status=[5]\\\\d\\\\d\" [$__interval]))",
-          "legendFormat": "Total Errors",
+          "expr": "sum(count_over_time({job=\"ecommerce-ui\"} |~ \"(?i)${search:raw}\" |~ \"(?i)${trace_id:raw}\" |~ \"(?i)${level:regex}\" [$__interval]))",
+          "legendFormat": "Total Matched Lines",
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Total Error Count (Selected Period)",
+      "title": "Total Matched Log Lines",
       "type": "stat"
     },
     {
@@ -385,14 +340,14 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "{job=\"ecommerce-ui\"} |~ \"(?i)${search:raw}\" |~ \"(?i)${level:regex}\"",
+          "expr": "{job=\"ecommerce-ui\"} |~ \"(?i)${search:raw}\" |~ \"(?i)${trace_id:raw}\" |~ \"(?i)${level:regex}\"",
           "legendFormat": "",
           "maxLines": 5000,
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Ecommerce UI \u2014 Historical Logs",
+      "title": "Ecommerce UI \u2014 Historical Log Archive",
       "type": "logs"
     }
   ],
@@ -401,7 +356,8 @@
   "tags": [
     "logs",
     "ecommerce-ui",
-    "historical-archive"
+    "historical-archive",
+    "search"
   ],
   "templating": {
     "list": [
@@ -424,12 +380,55 @@
         "type": "datasource"
       },
       {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "description": "Free text regex/substring search across log lines",
+        "hide": 0,
+        "label": "Keyword Search",
+        "name": "search",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "description": "Search for specific transaction or correlation ID",
+        "hide": 0,
+        "label": "Trace / Request ID",
+        "name": "trace_id",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
         "allValue": ".+",
         "current": {
           "selected": true,
           "text": "All",
           "value": "$__all"
         },
+        "description": "Filter by log severity level",
         "hide": 0,
         "includeAll": true,
         "label": "Log Level",
@@ -465,31 +464,11 @@
         "query": "All,error,warn,info,debug",
         "skipUrlSync": false,
         "type": "custom"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "",
-          "value": ""
-        },
-        "hide": 0,
-        "label": "Search Filter",
-        "name": "search",
-        "options": [
-          {
-            "selected": true,
-            "text": "",
-            "value": ""
-          }
-        ],
-        "query": "",
-        "skipUrlSync": false,
-        "type": "textbox"
       }
     ]
   },
   "time": {
-    "from": "now-7d",
+    "from": "now-30d",
     "to": "now"
   },
   "timepicker": {
