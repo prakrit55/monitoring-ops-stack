@@ -17,6 +17,8 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./rules:/etc/prometheus/rules:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - observability-net
 

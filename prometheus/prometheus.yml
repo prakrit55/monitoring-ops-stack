@@ -19,7 +19,7 @@ scrape_configs:
       - targets: ['node-exporter:9100']
 
   # Synthetic Mock Metrics Generator (service-a, service-b, service-c, service-d)
-  - job_name: 'mock-services'
+  - job_name: 'mock-metrics'
     scrape_interval: 5s
     honor_labels: true
     static_configs:
@@ -30,34 +30,34 @@ scrape_configs:
     scrape_interval: 10s
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['ecommerce-ui:4000', 'host.docker.internal:4000', 'localhost:4000']
+      - targets: ['ecommerce-ui:4000']
 
   - job_name: 'product-catalog'
     scrape_interval: 10s
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['product-catalog:3001', 'host.docker.internal:3001', 'localhost:3001']
+      - targets: ['product-catalog:3001']
 
   - job_name: 'product-inventory'
     scrape_interval: 10s
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['product-inventory:3002', 'host.docker.internal:3002', 'localhost:3002']
+      - targets: ['product-inventory:3002']
 
   - job_name: 'shipping-and-handling'
     scrape_interval: 10s
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['shipping-and-handling:8080', 'host.docker.internal:8080', 'localhost:8080']
+      - targets: ['shipping-and-handling:8080']
 
-  - job_name: 'contact-support'
+  - job_name: 'contact-support-team'
     scrape_interval: 10s
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['contact-support-team:8000', 'contact-support:8000', 'host.docker.internal:8000', 'localhost:8000']
+      - targets: ['contact-support-team:8000']
 
   - job_name: 'order-management'
     scrape_interval: 10s
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['order-management:9090', 'host.docker.internal:9090', 'localhost:9090']
+      - targets: ['order-management:9090']

@@ -62,6 +62,8 @@ services:
     depends_on:
       - node-exporter
       - alertmanager
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - monitoring
 
