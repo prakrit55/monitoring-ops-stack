@@ -1,0 +1,5 @@
+Flask==2.0.1
+flask-cors==3.0.10
+Werkzeug==2.0.1
+psycopg2-binary
+prometheus-client>=0.19.0
