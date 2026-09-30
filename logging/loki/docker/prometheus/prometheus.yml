@@ -36,3 +36,34 @@ scrape_configs:
     honor_labels: true
     static_configs:
       - targets: ["mock-metrics:8080"]
+
+  # Real Production Microservices
+  - job_name: "ecommerce-ui"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ecommerce-ui:4000", "host.docker.internal:4000", "localhost:4000"]
+
+  - job_name: "product-catalog"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["product-catalog:3001", "host.docker.internal:3001", "localhost:3001"]
+
+  - job_name: "product-inventory"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["product-inventory:3002", "host.docker.internal:3002", "localhost:3002"]
+
+  - job_name: "shipping-and-handling"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["shipping-and-handling:8080", "host.docker.internal:8080", "localhost:8080"]
+
+  - job_name: "contact-support"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["contact-support-team:8000", "contact-support:8000", "host.docker.internal:8000", "localhost:8000"]
+
+  - job_name: "order-management"
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["order-management:9090", "host.docker.internal:9090", "localhost:9090"]

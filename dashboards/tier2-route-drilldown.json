@@ -310,10 +310,10 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (route, method) (rate(http_requests_total{job=~\"$service\", route!=\"\"}[2m])) or sum by (route, method) (label_replace(rate(http_requests_total{job=~\"$service\", path!=\"\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route, method) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\", uri!=\"\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\"))",
+          "expr": "sum by (path, method) (rate(http_requests_total{job=~\"$service\"}[2m])) or sum by (path, method) (label_replace(rate(http_requests_total{job=~\"$service\"}[2m]), \"path\", \"$1\", \"route\", \"(.*)\")) or sum by (path, method) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\"}[2m]), \"path\", \"$1\", \"uri\", \"(.*)\"))",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{method}} {{route}} - RPS",
+          "legendFormat": "{{method}} {{path}} - RPS",
           "range": false,
           "refId": "A"
         },
@@ -323,10 +323,10 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, route, method) (rate(http_request_duration_seconds_bucket{job=~\"$service\", route!=\"\"}[2m])) or sum by (le, route, method) (label_replace(rate(http_request_duration_seconds_bucket{job=~\"$service\", path!=\"\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (le, route, method) (label_replace(rate(http_server_requests_seconds_bucket{job=~\"$service\", uri!=\"\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\"))) ",
+          "expr": "histogram_quantile(0.95, sum by (le, path, method) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m])) or sum by (le, path, method) (label_replace(rate(http_request_duration_seconds_bucket{job=~\"$service\"}[2m]), \"path\", \"$1\", \"route\", \"(.*)\")) or sum by (le, path, method) (label_replace(rate(http_server_requests_seconds_bucket{job=~\"$service\"}[2m]), \"path\", \"$1\", \"uri\", \"(.*)\"))) ",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{method}} {{route}} - P95",
+          "legendFormat": "{{method}} {{path}} - P95",
           "range": false,
           "refId": "B"
         },
@@ -336,10 +336,10 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "((sum by (route, method) (rate(http_requests_total{job=~\"$service\", route!=\"\", status_code=~\"5.*|5..\"}[2m])) or sum by (route, method) (label_replace(rate(http_requests_total{job=~\"$service\", path!=\"\", status_code=~\"5.*|5..\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route, method) (label_replace(label_replace(rate(http_server_requests_seconds_count{job=~\"$service\", uri!=\"\", status=~\"5.*|5..\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\"), \"status_code\", \"$1\", \"status\", \"(.*)\"))) / (sum by (route, method) (rate(http_requests_total{job=~\"$service\", route!=\"\"}[2m])) or sum by (route, method) (label_replace(rate(http_requests_total{job=~\"$service\", path!=\"\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route, method) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\", uri!=\"\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\")))) * 100",
+          "expr": "((sum by (path, method) (rate(http_requests_total{job=~\"$service\", status_code=~\"5..\"}[2m])) or sum by (path, method) (label_replace(rate(http_requests_total{job=~\"$service\", status_code=~\"5..\"}[2m]), \"path\", \"$1\", \"route\", \"(.*)\")) or sum by (path, method) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\", status=~\"5..\"}[2m]), \"path\", \"$1\", \"uri\", \"(.*)\"))) / (sum by (path, method) (rate(http_requests_total{job=~\"$service\"}[2m])) or sum by (path, method) (label_replace(rate(http_requests_total{job=~\"$service\"}[2m]), \"path\", \"$1\", \"route\", \"(.*)\")) or sum by (path, method) (label_replace(rate(http_server_requests_seconds_count{job=~\"$service\"}[2m]), \"path\", \"$1\", \"uri\", \"(.*)\")))) * 100",
           "format": "table",
           "instant": true,
-          "legendFormat": "{{method}} {{route}} - 5xx Rate",
+          "legendFormat": "{{method}} {{path}} - 5xx Rate",
           "range": false,
           "refId": "C"
         }
@@ -349,7 +349,7 @@
         {
           "id": "joinByField",
           "options": {
-            "byField": "route",
+            "byField": "path",
             "mode": "outer"
           }
         },
@@ -365,18 +365,18 @@
               "__name__ 2": true,
               "method 1": true,
               "method 2": true,
-              "route 1": true,
-              "route 2": true
+              "path 1": true,
+              "path 2": true
             },
             "indexByName": {
-              "route": 0,
+              "path": 0,
               "method": 1,
               "Value #A": 2,
               "Value #B": 3,
               "Value #C": 4
             },
             "renameByName": {
-              "route": "Endpoint URI / Route",
+              "path": "Endpoint URI / Route",
               "method": "HTTP Method",
               "Value #A": "Ingress RPS",
               "Value #B": "P95 Latency",
