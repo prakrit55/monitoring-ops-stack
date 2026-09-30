@@ -290,7 +290,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum by (job) (rate({job=~\"$service\"} |~ `(?i)error|exception|fail|status=[5]\\d\\d` [1m]))",
+          "expr": "sum by (job) (rate({job=~\"$service\"} |~ `(?i)error|exception|fail` [1m]))",
           "legendFormat": "{{job}} - errors",
           "queryType": "range",
           "refId": "A"
@@ -341,7 +341,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "{job=~\"$service\"} |~ `(?i)${search:raw}` |~ `(?i)${log_level:regex}`",
+          "expr": "{job=~\"$service\"} |~ `(?i)${search:raw}`",
           "legendFormat": "",
           "queryType": "range",
           "refId": "A"
