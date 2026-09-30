@@ -37,12 +37,6 @@
     },
     {
       "type": "panel",
-      "id": "table",
-      "name": "Table",
-      "version": ""
-    },
-    {
-      "type": "panel",
       "id": "logs",
       "name": "Logs",
       "version": ""
@@ -63,7 +57,7 @@
       }
     ]
   },
-  "description": "Tier 2: Production-grade Service Logs & Error Triage dashboard powered by Grafana Loki. Features 4-tier visual hierarchy: KPI summary stats, time-series velocity trends, analytical error signatures, and real-time log streaming with instant full-text filtering.",
+  "description": "Tier 2: Production-grade Service Logs & Error Triage dashboard with strict per-service log segregation using Grafana Row Repeating. Features cluster-wide overview KPIs followed by dedicated, repeating per-service analytical logs and throughput streams.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -134,7 +128,7 @@
       },
       "id": 100,
       "panels": [],
-      "title": "Row 1: Application Health & Log Ingestion KPIs",
+      "title": "Global Cluster & Multi-Service Overview",
       "type": "row"
     },
     {
@@ -166,8 +160,8 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 8,
+        "h": 5,
+        "w": 6,
         "x": 0,
         "y": 1
       },
@@ -195,12 +189,12 @@
           },
           "editorMode": "code",
           "expr": "sum(rate({job=~\"$service\"}[1m]))",
-          "legendFormat": "Total Ingestion Rate",
+          "legendFormat": "Global Rate",
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Total Log Ingestion Rate (lines/sec)",
+      "title": "Global Log Ingestion Rate (lines/sec)",
       "type": "stat"
     },
     {
@@ -237,9 +231,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 8,
+        "h": 5,
+        "w": 6,
+        "x": 6,
         "y": 1
       },
       "id": 2,
@@ -266,92 +260,13 @@
           },
           "editorMode": "code",
           "expr": "(sum(rate({job=~\"$service\"} |~ `(?i)error|exception|fail|status=[5]\\d\\d` [1m])) / (sum(rate({job=~\"$service\"}[1m])) > 0)) * 100",
-          "legendFormat": "Error %",
+          "legendFormat": "5xx / Error %",
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Error Log Ratio (%)",
+      "title": "5xx / Error Ratio %",
       "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "${DS_LOKI}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 16,
-        "y": 1
-      },
-      "id": 3,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.4.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "${DS_LOKI}"
-          },
-          "editorMode": "code",
-          "expr": "sum(count_over_time({job=~\"$service\"} |~ `(?i)panic|fatal|OOMKilled|ClientClosedRequest|deadlock` [1h]))",
-          "legendFormat": "Panics / Fatals",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "Critical Panics & Aborts (1h)",
-      "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 5
-      },
-      "id": 101,
-      "panels": [],
-      "title": "Row 2: Ingestion Velocity & Error Dynamics",
-      "type": "row"
     },
     {
       "datasource": {
@@ -410,12 +325,12 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
+        "h": 5,
         "w": 12,
-        "x": 0,
-        "y": 6
+        "x": 12,
+        "y": 1
       },
-      "id": 4,
+      "id": 3,
       "options": {
         "legend": {
           "calcs": [
@@ -445,8 +360,23 @@
           "refId": "A"
         }
       ],
-      "title": "Ingestion Rate by Job (lines/sec)",
+      "title": "Log Volume Comparison Across Jobs",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "id": 101,
+      "panels": [],
+      "repeat": "service",
+      "repeatDirection": "v",
+      "title": "Service: $service",
+      "type": "row"
     },
     {
       "datasource": {
@@ -456,18 +386,17 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "fixedColor": "semi-dark-red",
             "mode": "palette-classic"
           },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "Errors / Sec",
+            "axisLabel": "Lines / Sec",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 25,
+            "fillOpacity": 15,
             "gradientMode": "opacity",
             "hideFrom": {
               "legend": false,
@@ -488,7 +417,7 @@
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "line"
+              "mode": "off"
             }
           },
           "mappings": [],
@@ -498,10 +427,6 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
               }
             ]
           },
@@ -511,7 +436,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": ".*"
+              "options": "Errors (lines/s)"
             },
             "properties": [
               {
@@ -520,18 +445,37 @@
                   "fixedColor": "semi-dark-red",
                   "mode": "fixed"
                 }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 35
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Throughput (lines/s)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "semi-dark-blue",
+                  "mode": "fixed"
+                }
               }
             ]
           }
         ]
       },
       "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 6
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 7
       },
-      "id": 5,
+      "id": 4,
       "options": {
         "legend": {
           "calcs": [
@@ -555,288 +499,38 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (job) (rate({job=~\"$service\"} |~ `(?i)error|exception|fail|status=[45]\\d\\d` [1m]))",
-          "legendFormat": "{{job}} - errors",
+          "expr": "sum(rate({job=\"$service\"}[1m]))",
+          "legendFormat": "Throughput (lines/s)",
           "queryType": "range",
           "refId": "A"
-        }
-      ],
-      "title": "Error & Timeout Spikes over Time (lines/sec)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 13
-      },
-      "id": 102,
-      "panels": [],
-      "title": "Row 3: Error Signatures & Log Level Breakdown",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "${DS_LOKI}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "semi-dark-red",
-                "value": 1
-              }
-            ]
-          }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "1h Error Count"
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "mode": "gradient",
-                  "type": "color-background"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 14,
-        "x": 0,
-        "y": 14
-      },
-      "id": 6,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": true
-        },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "1h Error Count"
-          }
-        ]
-      },
-      "pluginVersion": "10.4.2",
-      "targets": [
         {
           "datasource": {
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (job, level) (count_over_time({job=~\"$service\"} |~ `(?i)error|exception|fail` [1h]))",
-          "legendFormat": "{{job}} [{{level}}]",
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "Top Error Signatures & Frequency (1h)",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "${DS_LOKI}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "Volume",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "error"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "warn"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "info"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "blue",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 10,
-        "x": 14,
-        "y": 14
-      },
-      "id": 7,
-      "options": {
-        "legend": {
-          "calcs": [
-            "sum"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "descending"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "${DS_LOKI}"
-          },
-          "editorMode": "code",
-          "expr": "sum by (level) (count_over_time({job=~\"$service\", level=~\".+\"}[5m]))",
-          "legendFormat": "{{level}}",
+          "expr": "sum(rate({job=\"$service\"} |~ `(?i)error|exception|status=[5]\\d\\d` [1m]))",
+          "legendFormat": "Errors (lines/s)",
           "queryType": "range",
-          "refId": "A"
+          "refId": "B"
         }
       ],
-      "title": "Log Volume Distribution by Severity Level",
+      "title": "$service - Error Rate vs Throughput",
       "type": "timeseries"
     },
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 21
-      },
-      "id": 103,
-      "panels": [],
-      "title": "Row 4: Full-Width Real-Time Log Stream",
-      "type": "row"
-    },
-    {
       "datasource": {
         "type": "loki",
         "uid": "${DS_LOKI}"
       },
       "gridPos": {
-        "h": 16,
-        "w": 24,
-        "x": 0,
-        "y": 22
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 7
       },
-      "id": 8,
+      "id": 5,
       "options": {
         "dedupStrategy": "none",
         "enableLogDetails": true,
@@ -854,13 +548,13 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "{job=~\"$service\"} |~ `(?i)${search:raw}`",
+          "expr": "{job=\"$service\"} |~ `(?i)${search:raw}` |~ `(?i)${level:regex}`",
           "legendFormat": "",
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Live Application Log Stream ($service)",
+      "title": "$service - Live Log Output",
       "type": "logs"
     }
   ],
