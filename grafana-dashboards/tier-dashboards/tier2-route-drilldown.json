@@ -514,6 +514,7 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
+          "noValue": "0",
           "unit": "short"
         },
         "overrides": []
@@ -534,8 +535,8 @@
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "editorMode": "code",
-          "expr": "sum by (route) (http_requests_in_flight{job=~\"$service\", route=~\"$route\", route!=\"\"}) or sum by (route) (label_replace(http_requests_in_flight{job=~\"$service\", path=~\"$route\"}, \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route) (label_replace(http_requests_in_flight{job=~\"$service\", uri=~\"$route\"}, \"route\", \"$1\", \"uri\", \"(.*)\"))",
-          "legendFormat": "{{route}}",
+          "expr": "sum by (route) (http_requests_in_flight{job=~\"$service\", route=~\"$route\", route!=\"\"}) or sum by (route) (label_replace(http_requests_in_flight{job=~\"$service\", path=~\"$route\"}, \"route\", \"$1\", \"path\", \"(.*)\")) or sum by (route) (label_replace(http_requests_in_flight{job=~\"$service\", uri=~\"$route\"}, \"route\", \"$1\", \"uri\", \"(.*)\")) or sum by (job) (http_requests_in_flight{job=~\"$service\"}) or sum by (service) (http_requests_in_flight{service=~\"$service\"})",
+          "legendFormat": "{{route}}{{job}}{{service}}",
           "range": true,
           "refId": "A"
         }
@@ -570,6 +571,7 @@
             "thresholdsStyle": { "mode": "line" }
           },
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -634,6 +636,7 @@
             "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
+          "noValue": "0 B",
           "unit": "decbytes"
         },
         "overrides": []
@@ -654,8 +657,8 @@
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_response_size_bytes_bucket{job=~\"$service\", route=~\"$route\", route!=\"\"}[2m]))) or histogram_quantile(0.95, sum by (le, route) (label_replace(rate(http_response_size_bytes_bucket{job=~\"$service\", path=~\"$route\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\"))) or histogram_quantile(0.95, sum by (le, route) (label_replace(rate(http_server_response_bytes_bucket{job=~\"$service\", uri=~\"$route\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\")))",
-          "legendFormat": "{{route}} - P95 Payload",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_response_size_bytes_bucket{job=~\"$service\", route=~\"$route\", route!=\"\"}[2m]))) or histogram_quantile(0.95, sum by (le, route) (label_replace(rate(http_response_size_bytes_bucket{job=~\"$service\", path=~\"$route\"}[2m]), \"route\", \"$1\", \"path\", \"(.*)\"))) or histogram_quantile(0.95, sum by (le, route) (label_replace(rate(http_server_response_bytes_bucket{job=~\"$service\", uri=~\"$route\"}[2m]), \"route\", \"$1\", \"uri\", \"(.*)\"))) or (rate(http_response_bytes_total{job=~\"$service\"}[2m]) / rate(http_requests_total{job=~\"$service\"}[2m]))",
+          "legendFormat": "{{route}}{{job}} - P95 Payload",
           "range": true,
           "refId": "A"
         }
