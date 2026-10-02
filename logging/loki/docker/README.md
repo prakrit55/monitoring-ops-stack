@@ -12,7 +12,7 @@ This directory contains configuration files and a [`docker-compose.yml`](file://
 | **Fluent Bit** | `fluent/fluent-bit:3.0.4` | `2020`, `24224` | High-throughput log processor & shipper forwarding container & synthetic logs to Loki |
 | **Prometheus** | `prom/prometheus:v2.51.2` | `9090` | Metrics engine configured with Tier 1/2/3 recording rules, alert rules, and scraping all components |
 | **Alertmanager** | `prom/alertmanager:v0.27.0` | `9093` | Alert routing dispatcher with critical (PagerDuty) and warning (Slack) channel trees |
-| **Grafana** | `grafana/grafana:10.4.2` | `3000` | UI with pre-provisioned Loki & Prometheus datasources and all 15 Kubernetes & Tier dashboards |
+| **Grafana** | `grafana/grafana:latest` | `3000` | UI with pre-provisioned Loki & Prometheus datasources and all 15 Kubernetes & Tier dashboards |
 | **Node Exporter** | `prom/node-exporter:v1.7.0` | `9100` | Host hardware & OS metric collector (CPU, memory, disk, network) |
 | **Mock Metrics** | `python:3.11-alpine` | `8080` | Live synthetic traffic generator providing real-time RED microservice & Kubernetes metrics |
 
